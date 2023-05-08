@@ -1,6 +1,7 @@
 <component name="InspectionProjectProfileManager">
   <profile version="1.0">
     <option name="myName" value="Project Default" />
+    <inspection_tool class="GoSnakeCaseUsage" enabled="false" level="WEAK WARNING" enabled_by_default="false" />
     <inspection_tool class="GoUnhandledErrorResult" enabled="true" level="WARNING" enabled_by_default="true">
       <methods>
         <method importPath="hash" receiver="Hash" name="Write" />
@@ -16,6 +17,8 @@
         <method importPath="os" receiver="*File" name="Close" />
         <method importPath="net" receiver="Listener" name="Close" />
         <method importPath="go-redis/interface/tcp" receiver="Handler" name="Close" />
+        <method importPath="go-redis/resp/client" receiver="*Client" name="handleRead" />
+        <method importPath="go-redis/cluster" receiver="*ClusterDatabase" name="returnPeerClient" />
       </methods>
     </inspection_tool>
   </profile>

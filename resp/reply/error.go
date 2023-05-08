@@ -1,7 +1,11 @@
 package reply
 
 import (
+	"bytes"
+	"fmt"
+	"go-redis/enum"
 	"go-redis/interface/resp"
+	"go-redis/lib/utils"
 	"strings"
 	"sync"
 )
@@ -24,10 +28,11 @@ var (
 type unknownErrReply struct {
 }
 
+// NewUnknownErrReply 用于创建未知错误的回复
 func NewUnknownErrReply() resp.ErrorReply {
 	storeUnknownErrReplyOnce.Do(func() {
 		theUnknownErrReply = new(unknownErrReply)
-		errorReplies[theUnknownErrReply] = []byte("-ERR unknown\r\n")
+		errorReplies[theUnknownErrReply] = utils.String2Bytes(enum.UNKNOWN_ERR)
 	})
 	return theUnknownErrReply
 }
@@ -37,34 +42,36 @@ func (reply *unknownErrReply) Bytes() []byte {
 }
 
 func (reply *unknownErrReply) Error() string {
-	return strings.Trim(string(errorReplies[reply]), "-\r\n")
+	return bytes2Error(reply.Bytes())
 }
 
 // argNumErrReply 用于表示参数数量错误的回复
 type argNumErrReply struct {
-	cmd string
+	cmd string // 表示命令
 }
 
+// NewArgNumErrReply 用于创建参数数量错误的回复
 func NewArgNumErrReply(cmd string) resp.ErrorReply {
 	return &argNumErrReply{cmd}
 }
 
 func (reply *argNumErrReply) Bytes() []byte {
-	return []byte("-ERR wrong number of arguments for '" + reply.cmd + "' command\r\n")
+	return utils.String2Bytes(fmt.Sprintf(enum.ARG_NUM_ERR, strings.ToLower(reply.cmd)))
 }
 
 func (reply *argNumErrReply) Error() string {
-	return "ERR wrong number of arguments for '" + reply.cmd + "' command"
+	return bytes2Error(reply.Bytes())
 }
 
 // syntaxErrReply 用于表示语法错误的回复
 type syntaxErrReply struct {
 }
 
+// NewSyntaxErrReply 用于创建语法错误的回复
 func NewSyntaxErrReply() resp.ErrorReply {
 	storeSyntaxErrReplyOnce.Do(func() {
 		theSyntaxErrReply = new(syntaxErrReply)
-		errorReplies[theSyntaxErrReply] = []byte("-ERR syntax error\r\n")
+		errorReplies[theSyntaxErrReply] = utils.String2Bytes(enum.SYNTAX_ERR)
 	})
 	return theSyntaxErrReply
 }
@@ -74,7 +81,7 @@ func (reply *syntaxErrReply) Bytes() []byte {
 }
 
 func (reply *syntaxErrReply) Error() string {
-	return strings.Trim(string(errorReplies[reply]), "-\r\n")
+	return bytes2Error(reply.Bytes())
 }
 
 // wrongTypeErrReply 用于表示类型错误的回复
@@ -86,30 +93,91 @@ func (reply *wrongTypeErrReply) Bytes() []byte {
 }
 
 func (reply *wrongTypeErrReply) Error() string {
-	return strings.Trim(string(errorReplies[theWrongTypeErrReply]), "-\r\n")
+	return bytes2Error(reply.Bytes())
 }
 
+// NewWrongTypeErrReply 用于创建类型错误的回复
 func NewWrongTypeErrReply() resp.ErrorReply {
 	storeWrongTypeErrReplyOnce.Do(func() {
 		theWrongTypeErrReply = new(wrongTypeErrReply)
-		errorReplies[theWrongTypeErrReply] = []byte("-WRONGTYPE Operation against a key holding the wrong kind of value\r\n")
+		errorReplies[theWrongTypeErrReply] = utils.String2Bytes(enum.WRONG_TYPE_ERR)
 	})
 	return theWrongTypeErrReply
 }
 
 // protocolErrReply 用于表示协议错误的回复
 type protocolErrReply struct {
-	msg string
+	msg string // 表示错误信息
 }
 
 func (reply *protocolErrReply) Bytes() []byte {
-	return []byte("-ERR Protocol error: '" + reply.msg + "'\r\n")
+	return utils.String2Bytes(fmt.Sprintf(enum.PROTOCOL_ERR, reply.msg))
 }
 
 func (reply *protocolErrReply) Error() string {
-	return "ERR Protocol error: '" + reply.msg + "'"
+	return bytes2Error(reply.Bytes())
 }
 
+// NewProtocolErrReply 用于创建协议错误的回复
 func NewProtocolErrReply(msg string) resp.ErrorReply {
 	return &protocolErrReply{msg}
+}
+
+// standardErrReply 用于表示标准错误回复
+type standardErrReply struct {
+	status string // 表示错误状态
+}
+
+// Bytes 用于返回标准错误回复的字节切片
+func (reply *standardErrReply) Bytes() []byte {
+	return utils.String2Bytes(fmt.Sprintf(enum.STANDARD_ERR, reply.status))
+}
+
+// NewErrReply 用于创建标准错误回复
+func NewErrReply(status string) resp.Reply {
+	return &standardErrReply{status}
+}
+
+func NewErrReplyByError(err error) resp.Reply {
+	return NewErrReply(err.Error())
+}
+
+// unknownCommandErrReply 用于表示未知命令的回复
+type unknownCommandErrReply struct {
+	cmd string // 表示命令
+}
+
+// NewUnknownCommandErrReply 用于创建未知命令的回复
+func NewUnknownCommandErrReply(cmd string) resp.Reply {
+	return &unknownCommandErrReply{cmd}
+}
+
+func (reply *unknownCommandErrReply) Bytes() []byte {
+	return utils.String2Bytes(fmt.Sprintf(enum.UNKNOWN_CMD_ERR, reply.cmd))
+}
+
+func (reply *unknownCommandErrReply) Error() string {
+	return bytes2Error(reply.Bytes())
+}
+
+// intErrReply 用于表示整数错误的回复
+type intErrReply struct {
+}
+
+func (reply *intErrReply) Bytes() []byte {
+	return utils.String2Bytes(enum.INT_ERR)
+}
+
+func (reply *intErrReply) Error() string {
+	return bytes2Error(reply.Bytes())
+}
+
+// NewIntErrReply 用于创建整数错误的回复
+func NewIntErrReply() resp.ErrorReply {
+	return &intErrReply{}
+}
+
+// bytes2Error 用于将字节切片转换为字符串
+func bytes2Error(b []byte) string {
+	return utils.Bytes2String(bytes.Trim(b, "-\r\n"))
 }

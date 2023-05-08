@@ -1,7 +1,9 @@
 package reply
 
 import (
+	"go-redis/enum"
 	"go-redis/interface/resp"
+	"go-redis/lib/utils"
 	"sync"
 )
 
@@ -33,7 +35,7 @@ type pongReply struct {
 func NewPongReply() resp.Reply {
 	storePongReplyOnce.Do(func() {
 		thePongReply = new(pongReply)
-		replies[thePongReply] = []byte("+PONG\r\n")
+		replies[thePongReply] = utils.String2Bytes(enum.PONG)
 	})
 	return thePongReply
 }
@@ -46,10 +48,11 @@ func (reply *pongReply) Bytes() []byte {
 type okReply struct {
 }
 
+// NewOKReply 用于创建OK的回复
 func NewOKReply() resp.Reply {
 	storeOKReplyOnce.Do(func() {
 		theOKReply = new(okReply)
-		replies[theOKReply] = []byte("+OK\r\n")
+		replies[theOKReply] = utils.String2Bytes(enum.OK)
 	})
 	return theOKReply
 }
@@ -62,10 +65,11 @@ func (reply *okReply) Bytes() []byte {
 type nullBulkReply struct {
 }
 
+// NewNullBulkReply 用于创建空的回复字符串
 func NewNullBulkReply() resp.Reply {
 	storeNullBulkReplyOnce.Do(func() {
 		theNullBulkReply = new(nullBulkReply)
-		replies[theNullBulkReply] = []byte("$-1\r\n")
+		replies[theNullBulkReply] = utils.String2Bytes(enum.NIL)
 	})
 	return theNullBulkReply
 }
@@ -78,10 +82,11 @@ func (reply *nullBulkReply) Bytes() []byte {
 type emptyMultiBulkReply struct {
 }
 
+// NewEmptyMultiBulkReply 用于创建空的多条批量回复数组
 func NewEmptyMultiBulkReply() resp.Reply {
 	storeEmptyMultiBulkReplyOnce.Do(func() {
 		theEmptyMultiBulkReply = new(emptyMultiBulkReply)
-		replies[theEmptyMultiBulkReply] = []byte("*0\r\n")
+		replies[theEmptyMultiBulkReply] = utils.String2Bytes(enum.EMPTY_BULK_REPLY)
 	})
 	return theEmptyMultiBulkReply
 }
@@ -97,7 +102,7 @@ type noReply struct {
 func NewNoReply() resp.Reply {
 	storeNoReplyOnce.Do(func() {
 		theNoReply = new(noReply)
-		replies[theNoReply] = []byte("")
+		replies[theNoReply] = utils.String2Bytes(enum.NO_REPLY)
 	})
 	return theNoReply
 }

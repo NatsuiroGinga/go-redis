@@ -31,7 +31,7 @@ func ListenAndServeWithSignal(cfg *Config, handler tcp.Handler) error {
 		sig := <-sigChan
 		switch sig {
 		case syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT:
-			logger.Info("receive signal", sig)
+			go logger.Info("receive signal", sig)
 			// close the listener and handler.
 			closeChan <- struct{}{}
 		}
@@ -43,7 +43,7 @@ func ListenAndServeWithSignal(cfg *Config, handler tcp.Handler) error {
 		return err
 	}
 
-	logger.Info("tcp server start listening on", cfg.Address)
+	go logger.Info("tcp server start listening on", cfg.Address)
 	// handle the connection in a new goroutine.
 	err = ListenAndServe(listen, handler, closeChan)
 
@@ -61,7 +61,7 @@ func ListenAndServe(listener net.Listener, handler tcp.Handler, closeChan <-chan
 		// wait for the close signal.
 		<-closeChan
 		// close the listener when the application closes.
-		logger.Info("tcp server stop listening on", listener.Addr())
+		go logger.Info("tcp server stop listening on", listener.Addr())
 		// close the listener and handler.
 		release(listener, handler)
 	}()
@@ -75,11 +75,11 @@ func ListenAndServe(listener net.Listener, handler tcp.Handler, closeChan <-chan
 		// listen for an incoming connection.
 		conn, err := listener.Accept()
 		if err != nil {
-			logger.Error("accept error:", err)
+			logger.Error(err)
 			break
 		}
 
-		logger.Info("accept a new connection")
+		go logger.Info("accept a new connection")
 		// handle the connection in a new goroutine.
 		wg.Add(1)
 
