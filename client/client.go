@@ -1,6 +1,12 @@
 package client
 
 import (
+	"errors"
+	"net"
+	"runtime/debug"
+	"sync"
+	"time"
+
 	"go-redis/enum"
 	"go-redis/interface/db"
 	"go-redis/interface/resp"
@@ -9,10 +15,6 @@ import (
 	"go-redis/lib/utils"
 	"go-redis/resp/parser"
 	"go-redis/resp/reply"
-	"net"
-	"runtime/debug"
-	"sync"
-	"time"
 )
 
 // Client is a pipeline mode redis client
@@ -88,12 +90,11 @@ func (client *Client) Close() {
 func (client *Client) handleConnectionError() error {
 	err1 := client.conn.Close()
 	if err1 != nil {
-		if opErr, ok := err1.(*net.OpError); ok {
+		var opErr *net.OpError
+		if errors.As(err1, &opErr) {
 			if opErr.Err.Error() != enum.CONNECTION_CLOSED.Error() {
 				return err1
 			}
-		} else {
-			return err1
 		}
 	}
 	conn, err1 := net.Dial(network, client.addr)
@@ -158,7 +159,6 @@ func (client *Client) doRequest(req *request) {
 	re := utils.If2Kinds(len(req.args) == 1,
 		reply.NewBulkReply(req.args[0]),
 		reply.NewMultiBulkReply(req.args)).(resp.Reply)
-	//re := reply.NewMultiBulkReply(req.args)
 	bytes := re.Bytes()
 	_, err := client.conn.Write(bytes)
 	i := 0
