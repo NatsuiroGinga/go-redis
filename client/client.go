@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net"
 	"runtime/debug"
+	"strings"
 	"sync"
 	"time"
 
@@ -17,31 +18,32 @@ import (
 	"go-redis/resp/reply"
 )
 
-// Client is a pipeline mode redis client
+// Client 是一个Pipeline模式的客户端
 type Client struct {
-	conn        net.Conn
-	pendingReqs chan *request // wait to send
-	waitingReqs chan *request // waiting response
-	ticker      *time.Ticker
-	addr        string
+	conn        net.Conn      // 与服务端的链接
+	pendingReqs chan *request // 等待发送的请求队列
+	waitingReqs chan *request // 等待服务器响应的请求队列
+	ticker      *time.Ticker  // 发送心跳的计时器
+	addr        string        // 服务器地址
 
-	working *sync.WaitGroup // its counter presents unfinished requests(pending and waiting)
+	working *sync.WaitGroup // 统计未完成的任务, 包括未发送和未响应的请求
 }
 
-// request is a message sends to redis server
+// request 是发送给服务端的请求信息
 type request struct {
-	id        uint64
-	args      [][]byte
-	reply     resp.Reply
-	heartbeat bool
-	waiting   *wait.Wait
-	err       error
+	id        uint64     // 请求id
+	args      [][]byte   // 请求参数
+	reply     resp.Reply // 请求回复
+	heartbeat bool       // 标记是否为心跳请求
+	waiting   *wait.Wait // 调用协程发送请求后通过 waitgroup 等待请求异步处理完成
+	err       error      // 错误信息
 }
 
 const (
-	chanSize = 1 << 8
-	maxWait  = 3 * time.Second
-	network  = "tcp"
+	chanSize  = 1 << 8           // 请求队列的容量
+	maxWait   = 3 * time.Second  // 最大的等待时间
+	network   = "tcp"            // 网络链接方式
+	heartbeat = 10 * time.Second // 发送心跳的间隔
 )
 
 // NewClient creates a new client
@@ -56,7 +58,7 @@ func NewClient(addr string) (client *Client, err error) {
 		conn:        conn,
 		pendingReqs: make(chan *request, chanSize),
 		waitingReqs: make(chan *request, chanSize),
-		working:     &sync.WaitGroup{},
+		working:     new(sync.WaitGroup),
 	}, nil
 }
 
@@ -103,7 +105,12 @@ func (client *Client) handleConnectionError() error {
 		return err1
 	}
 	client.conn = conn
-	go client.handleRead()
+	go func() {
+		err := client.handleRead()
+		if err != nil {
+			logger.Error(err)
+		}
+	}()
 
 	return nil
 }
@@ -136,7 +143,11 @@ func (client *Client) Send(args db.CmdLine) resp.Reply {
 		return reply.NewErrReply(enum.SERVER_TIMEOUT.Error())
 	}
 
-	return utils.If(req.err == nil, req.reply, reply.NewErrReply(enum.REQUEST_FAILED.Error()))
+	if req.err != nil {
+		return reply.NewErrReply(enum.REQUEST_FAILED.Error())
+	}
+
+	return req.reply
 }
 
 func (client *Client) doHeartbeat() {
@@ -160,20 +171,21 @@ func (client *Client) doRequest(req *request) {
 		reply.NewBulkReply(req.args[0]),
 		reply.NewMultiBulkReply(req.args)).(resp.Reply)
 	bytes := re.Bytes()
-	_, err := client.conn.Write(bytes)
-	i := 0
-	for err != nil && i < 3 {
-		err = client.handleConnectionError()
-		if err == nil {
-			_, err = client.conn.Write(bytes)
+	var err error
+	for i := 0; i < 3; i++ { // only retry, waiting for handleRead
+		_, err = client.conn.Write(bytes)
+		if err == nil ||
+			(!strings.Contains(err.Error(), "timeout") && // only retry timeout
+				!strings.Contains(err.Error(), "deadline exceeded")) {
+			break
 		}
-		i++
+		logger.Error(err)
 	}
 	if err == nil {
 		client.waitingReqs <- req
 		return
 	}
-
+	logger.Error(err)
 	req.err = err
 	req.waiting.Done()
 }

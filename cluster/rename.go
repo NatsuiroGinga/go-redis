@@ -8,7 +8,7 @@ import (
 	"go-redis/resp/reply"
 )
 
-var rename = CmdFunc(func(clusterDatabase *ClusterDatabase, connection resp.Connection, args db.CmdLine) resp.Reply {
+var rename = cmdFunc(func(clusterDatabase *ClusterDatabase, connection resp.Connection, args db.CmdLine) resp.Reply {
 	if len(args) != 3 {
 		return reply.NewArgNumErrReply(enum.RENAME.String())
 	}

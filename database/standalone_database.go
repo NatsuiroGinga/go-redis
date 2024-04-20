@@ -1,6 +1,9 @@
 package database
 
 import (
+	"strconv"
+	"strings"
+
 	"go-redis/aof"
 	"go-redis/config"
 	"go-redis/enum"
@@ -9,8 +12,6 @@ import (
 	"go-redis/lib/logger"
 	"go-redis/lib/utils"
 	"go-redis/resp/reply"
-	"strconv"
-	"strings"
 )
 
 // StandaloneDatabase 单机版数据库
@@ -26,7 +27,7 @@ func NewStandaloneDatabase() *StandaloneDatabase {
 
 	dbSet := make([]*DB, config.Properties.Databases)
 	for i := range dbSet {
-		dbSet[i] = NewDB(i)
+		dbSet[i] = newDB(i)
 	}
 	d := &StandaloneDatabase{dbSet: dbSet}
 
@@ -39,8 +40,8 @@ func NewStandaloneDatabase() *StandaloneDatabase {
 		d.aofHandler = aofHandler
 		// 将aofHandler.Append方法赋值给每个db
 		for i := range dbSet {
-			j := i // 闭包, 防止循环变量被修改
-			dbSet[j].append = func(line db.CmdLine) {
+			j := i                                    // 闭包, 防止循环变量被修改
+			dbSet[j].append = func(line db.CmdLine) { // 给每个数据库添加aof落盘函数
 				aofHandler.Append(dbSet[j].index, line)
 			}
 		}
@@ -66,7 +67,7 @@ func (database *StandaloneDatabase) Exec(client resp.Connection, args db.CmdLine
 
 	dbIndex := client.GetDBIndex()
 	d := database.dbSet[dbIndex]
-	return d.Exec(args)
+	return d.exec(args)
 }
 
 func (database *StandaloneDatabase) Close() error {
@@ -79,10 +80,10 @@ func (database *StandaloneDatabase) AfterClientClose(_ resp.Connection) {
 func execSelect(conn resp.Connection, database *StandaloneDatabase, args db.CmdLine) resp.Reply {
 	dbIndex, err := strconv.Atoi(string(args[0]))
 	if err != nil {
-		return reply.NewErrReply("ERR invalid DB index")
+		return reply.NewErrReply("invalid DB index")
 	}
 	if dbIndex >= len(database.dbSet) {
-		return reply.NewErrReply("ERR invalid DB index")
+		return reply.NewErrReply("invalid DB index")
 	}
 	conn.SelectDB(dbIndex)
 

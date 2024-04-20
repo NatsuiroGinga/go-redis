@@ -4,7 +4,7 @@ import "sort"
 
 // Sortable is the type of data to sort
 type Sortable interface {
-	Integer | Float | ~string
+	Integer | Float | String
 }
 
 type Integer interface {
@@ -23,9 +23,22 @@ type Float interface {
 	~float32 | ~float64
 }
 
+type String interface {
+	~string
+}
+
 // Sort sorts a slice of Sortable in increasing order.
 func Sort[T Sortable](data []T) {
 	sort.Slice(data, func(i, j int) bool {
+		return data[i] < data[j]
+	})
+}
+
+func OrderSort[T Sortable](data []T, reverse bool) {
+	sort.Slice(data, func(i, j int) bool {
+		if reverse {
+			return data[i] > data[j]
+		}
 		return data[i] < data[j]
 	})
 }

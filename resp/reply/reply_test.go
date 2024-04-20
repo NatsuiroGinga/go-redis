@@ -1,8 +1,9 @@
 package reply
 
 import (
-	"go-redis/lib/logger"
 	"testing"
+
+	"go-redis/lib/logger"
 )
 
 func TestNewBulkReply(t *testing.T) {

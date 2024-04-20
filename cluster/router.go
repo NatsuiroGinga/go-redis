@@ -8,12 +8,12 @@ import (
 	"go-redis/resp/reply"
 )
 
-// CmdFunc is the function type for commands
-type CmdFunc func(clusterDatabase *ClusterDatabase, connection resp.Connection, args db.CmdLine) resp.Reply
+// cmdFunc is the function type for commands
+type cmdFunc func(clusterDatabase *ClusterDatabase, connection resp.Connection, args db.CmdLine) resp.Reply
 
 // newRouter returns a router map for commands
-func newRouter() (routerMap map[string]CmdFunc) {
-	return map[string]CmdFunc{
+func newRouter() (routerMap map[string]cmdFunc) {
+	return map[string]cmdFunc{
 		enum.EXISTS.String():   defaultFunc,
 		enum.TYPE.String():     defaultFunc,
 		enum.GET.String():      defaultFunc,
@@ -36,7 +36,7 @@ func newRouter() (routerMap map[string]CmdFunc) {
 //
 //	> SET key value
 //	< OK
-var defaultFunc = CmdFunc(func(clusterDatabase *ClusterDatabase, connection resp.Connection, args db.CmdLine) resp.Reply {
+var defaultFunc = cmdFunc(func(clusterDatabase *ClusterDatabase, connection resp.Connection, args db.CmdLine) resp.Reply {
 	if len(args) == 0 {
 		return reply.NewUnknownErrReply()
 	}

@@ -1,12 +1,16 @@
 package db
 
 import (
-	"go-redis/interface/resp"
 	"io"
+
+	"go-redis/interface/resp"
 )
 
-// CmdLine 表示一行命令
-type CmdLine = [][]byte
+// CmdLine 表示一行命令, 包括命令名和参数
+type CmdLine [][]byte
+
+// Params 不包括命令名的参数
+type Params [][]byte
 
 type Database interface {
 	Exec(client resp.Connection, args CmdLine) resp.Reply
@@ -19,5 +23,7 @@ type DataEntity struct {
 }
 
 func NewDataEntity(data any) *DataEntity {
-	return &DataEntity{Data: data}
+	return &DataEntity{
+		Data: data,
+	}
 }

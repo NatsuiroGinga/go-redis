@@ -7,14 +7,10 @@ import (
 	"go-redis/resp/reply"
 )
 
-func execPing(_ *DB, args db.CmdLine) resp.Reply {
-	if len(args) != 0 {
-		return reply.NewArgNumErrReply(enum.PING.String())
-	}
-
+func execPing(_ *DB, _ db.Params) resp.Reply {
 	return reply.NewPongReply()
 }
 
 func init() {
-	RegisterCommand(enum.PING, execPing)
+	registerCommand(enum.PING, noPrepare, execPing)
 }

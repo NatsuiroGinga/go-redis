@@ -13,14 +13,14 @@ import (
 
 // Settings stores config for logger
 type Settings struct {
-	Path       string `yaml:"path"`
-	Name       string `yaml:"name"`
-	Ext        string `yaml:"ext"`
-	TimeFormat string `yaml:"time-format"`
+	Path       string `yaml:"path"`        // 输出日志的路径
+	Name       string `yaml:"name"`        // 应用名称
+	Ext        string `yaml:"ext"`         // 文件扩展符
+	TimeFormat string `yaml:"time-format"` // 日期格式
 }
 
 var (
-	logFile            *os.File
+	_                  *os.File
 	defaultPrefix      = ""
 	defaultCallerDepth = 2
 	logger             *log.Logger

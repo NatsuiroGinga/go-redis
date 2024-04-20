@@ -1,10 +1,11 @@
 package reply
 
 import (
+	"sync"
+
 	"go-redis/enum"
 	"go-redis/interface/resp"
 	"go-redis/lib/utils"
-	"sync"
 )
 
 // 用于存储所有的回复, 使用懒加载的方式, 只有在需要的时候才会初始化且只会初始化一次
@@ -21,26 +22,26 @@ var (
 
 // 优化: 使用单例模式, 保证只有一个实例, 且只有在需要的时候才会初始化
 var (
-	thePongReply           *pongReply
+	thePongReply           *PongReply
 	theOKReply             *okReply
-	theNullBulkReply       *nullBulkReply
+	theNullBulkReply       *NullBulkReply
 	theEmptyMultiBulkReply *emptyMultiBulkReply
 	theNoReply             *noReply
 )
 
 // PongReply 用于表示PONG的回复
-type pongReply struct {
+type PongReply struct {
 }
 
 func NewPongReply() resp.Reply {
 	storePongReplyOnce.Do(func() {
-		thePongReply = new(pongReply)
+		thePongReply = new(PongReply)
 		replies[thePongReply] = utils.String2Bytes(enum.PONG)
 	})
 	return thePongReply
 }
 
-func (reply *pongReply) Bytes() []byte {
+func (reply *PongReply) Bytes() []byte {
 	return replies[reply]
 }
 
@@ -62,19 +63,19 @@ func (reply *okReply) Bytes() []byte {
 }
 
 // nullBulkReply 用于表示空的回复字符串
-type nullBulkReply struct {
+type NullBulkReply struct {
 }
 
 // NewNullBulkReply 用于创建空的回复字符串
 func NewNullBulkReply() resp.Reply {
 	storeNullBulkReplyOnce.Do(func() {
-		theNullBulkReply = new(nullBulkReply)
+		theNullBulkReply = new(NullBulkReply)
 		replies[theNullBulkReply] = utils.String2Bytes(enum.NIL)
 	})
 	return theNullBulkReply
 }
 
-func (reply *nullBulkReply) Bytes() []byte {
+func (reply *NullBulkReply) Bytes() []byte {
 	return replies[reply]
 }
 

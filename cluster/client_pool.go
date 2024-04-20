@@ -2,8 +2,9 @@ package cluster_database
 
 import (
 	"context"
+
 	pool "github.com/jolestar/go-commons-pool/v2"
-	"go-redis/resp/client"
+	"go-redis/client"
 )
 
 // ConnectionFactory is a factory to create connection

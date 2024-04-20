@@ -3,6 +3,8 @@ package reply
 import (
 	"bytes"
 	"fmt"
+	"strconv"
+
 	"go-redis/enum"
 	"go-redis/interface/db"
 	"go-redis/interface/resp"
@@ -35,16 +37,28 @@ func (reply *MultiBulkReply) Bytes() []byte {
 	if len(reply.Args) == 0 { // 如果是空数组, 则返回空数组的回复
 		return utils.String2Bytes(enum.EMPTY_BULK_REPLY)
 	}
-
-	buf := bytes.NewBufferString(fmt.Sprintf("*%d%s", len(reply.Args), enum.CRLF))
-	buf.Grow(len(reply.Args) << 5)
+	var buf bytes.Buffer
+	//Calculate the length of buffer
+	argLen := len(reply.Args)
+	bufLen := 1 + len(strconv.Itoa(argLen)) + 2
+	for _, arg := range reply.Args {
+		if arg == nil {
+			bufLen += 3 + 2
+		} else {
+			bufLen += 1 + len(strconv.Itoa(len(arg))) + 2 + len(arg) + 2
+		}
+	}
+	//Allocate memory
+	buf.Grow(bufLen)
+	buf.WriteString(fmt.Sprintf("*%d%s", argLen, enum.CRLF))
 
 	for _, arg := range reply.Args {
 		if len(arg) == 0 { // 如果数组中有空字符串, 则返回空字符串的回复
 			buf.WriteString(enum.NIL)
-			buf.WriteString(enum.CRLF)
 		} else {
-			buf.WriteString(fmt.Sprintf("$%d%s%s%s", len(arg), enum.CRLF, arg, enum.CRLF))
+			buf.WriteString(fmt.Sprintf("$%d%s", len(arg), enum.CRLF))
+			buf.Write(arg)
+			buf.WriteString(enum.CRLF)
 		}
 	}
 
@@ -56,18 +70,22 @@ func NewMultiBulkReply(args db.CmdLine) *MultiBulkReply {
 	return &MultiBulkReply{args}
 }
 
-// statusReply 用于表示回复状态
-type statusReply struct {
+// StatusReply 用于表示回复状态
+type StatusReply struct {
 	status string // 表示状态值
 }
 
-func (reply *statusReply) Bytes() []byte {
+func (reply *StatusReply) Status() string {
+	return reply.status
+}
+
+func (reply *StatusReply) Bytes() []byte {
 	return utils.String2Bytes(fmt.Sprintf("+%s%s", reply.status, enum.CRLF))
 }
 
 // NewStatusReply 用于创建回复状态
 func NewStatusReply(status string) resp.Reply {
-	return &statusReply{status}
+	return &StatusReply{status}
 }
 
 // IntReply 用于表示回复整数

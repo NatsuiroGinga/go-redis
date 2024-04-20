@@ -2,7 +2,11 @@ package cluster_database
 
 import (
 	"context"
+	"strconv"
+	"strings"
+
 	pool "github.com/jolestar/go-commons-pool/v2"
+	"go-redis/client"
 	"go-redis/config"
 	"go-redis/database"
 	"go-redis/enum"
@@ -11,10 +15,7 @@ import (
 	"go-redis/lib/consistenthash"
 	"go-redis/lib/logger"
 	"go-redis/lib/utils"
-	"go-redis/resp/client"
 	"go-redis/resp/reply"
-	"strconv"
-	"strings"
 )
 
 var router = newRouter()

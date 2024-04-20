@@ -80,13 +80,12 @@ func parse0(r io.Reader, ch chan<- *Payload) {
 			continue
 		}
 
-		msgStr := utils.Bytes2String(msg)
 		if !rs.readingMultiline { // 如果是初始读取或者不是处于多行数据读取状态
 			if msg[0] == '*' { // 如果是多行数据的头部
 				err = parseMultiBulkHeader(msg, &rs) // 解析多行数据的头部
 
 				if err != nil {
-					send(&rs, ch, reply.NewProtocolErrReply(msgStr), nil)
+					send(&rs, ch, err, nil)
 					continue
 				}
 				if rs.expectedArgsCount == 0 { // 如果参数个数为0, 则发送空的多行数据到通道中
@@ -97,7 +96,7 @@ func parse0(r io.Reader, ch chan<- *Payload) {
 				err = parseBulkHeader(msg, &rs) // 解析一行数据的头部
 
 				if err != nil {
-					send(&rs, ch, reply.NewProtocolErrReply(msgStr), nil)
+					send(&rs, ch, err, nil)
 					continue
 				}
 				if rs.bulkLen == -1 {
@@ -112,7 +111,7 @@ func parse0(r io.Reader, ch chan<- *Payload) {
 		} else {
 			err = readBody(msg, &rs)
 			if err != nil {
-				send(&rs, ch, reply.NewProtocolErrReply(msgStr), nil)
+				send(&rs, ch, err, nil)
 				continue
 			}
 			if rs.finished() {
@@ -181,7 +180,14 @@ func readLine(br *bufio.Reader, rs *readState) (line []byte, hasIOErr bool, err 
 
 // parseMultiBulkHeader 用于解析多行数据的头部
 //
-// 例如: *3\r\n$3\r\nSET\r\n$3\r\nkey\r\n$5\r\nvalue\r\n
+// 例如: *3\r\n
+//
+//	$3\r\n
+//	SET\r\n
+//	$3\r\n
+//	key\r\n
+//	$5\r\n
+//	value\r\n
 func parseMultiBulkHeader(msg []byte, rs *readState) (err error) {
 	rs.expectedArgsCount, err = strconv.Atoi(utils.Bytes2String(msg[1 : len(msg)-2]))
 
@@ -197,7 +203,7 @@ func parseMultiBulkHeader(msg []byte, rs *readState) (err error) {
 	} else if rs.expectedArgsCount < 0 {
 		rs.expectedArgsCount = 0
 		err = reply.NewProtocolErrReply(msgStr)
-	}
+	} // else rs.expectedArgsCount == 0, 不需要做操作, 调用此函数之后会做判断
 
 	return err
 }
@@ -209,7 +215,7 @@ func parseBulkHeader(msg []byte, rs *readState) (err error) {
 	rs.bulkLen, err = strconv.ParseInt(string(msg[1:len(msg)-2]), 10, 64)
 
 	msgStr := utils.Bytes2String(msg)
-	if err != nil {
+	if err != nil || rs.bulkLen < -1 {
 		return reply.NewProtocolErrReply(msgStr)
 	}
 	// err = nil
@@ -218,9 +224,9 @@ func parseBulkHeader(msg []byte, rs *readState) (err error) {
 		rs.readingMultiline = true
 		rs.args = make(db.CmdLine, 0, 1)
 		rs.expectedArgsCount = 1
-	} else {
+	} else if rs.bulkLen != -1 {
 		err = reply.NewProtocolErrReply(msgStr)
-	}
+	} // else rs.bulkLen == -1, 不需要做操作, 调用此函数的之后会做判断
 
 	return err
 }
@@ -229,13 +235,14 @@ func parseBulkHeader(msg []byte, rs *readState) (err error) {
 //
 // 例如: +OK\r\n, -ERR\r\n, :1000\r\n
 func parseSingleLineReply(msg []byte) (res resp.Reply, err error) {
+	// 去除开头的标示和末尾的\r\n
 	content := strings.TrimSuffix(utils.Bytes2String(msg), enum.CRLF)[1:]
 
 	switch msg[0] {
 	case '+': // 如果是+开头, 则表示是状态回复
 		res = reply.NewStatusReply(content)
 	case '-': // 如果是-开头, 则表示是错误回复
-		res = reply.NewErrReply(content)
+		res = reply.NewErrReply(strings.TrimPrefix(content, "ERR "))
 	case ':': // 如果是:开头, 则表示是整数回复
 		var code int64
 		code, err = strconv.ParseInt(content, 10, 64)

@@ -7,7 +7,7 @@ import (
 	"go-redis/resp/reply"
 )
 
-var del = CmdFunc(func(clusterDatabase *ClusterDatabase, connection resp.Connection, args db.CmdLine) resp.Reply {
+var del = cmdFunc(func(clusterDatabase *ClusterDatabase, connection resp.Connection, args db.CmdLine) resp.Reply {
 	if len(args) == 0 {
 		return reply.NewUnknownErrReply()
 	}

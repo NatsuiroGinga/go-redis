@@ -1,22 +1,23 @@
 package database
 
 import (
+	"strconv"
+
 	"go-redis/enum"
 	"go-redis/interface/db"
 	"go-redis/interface/resp"
 	"go-redis/lib/utils"
 	"go-redis/resp/reply"
-	"strconv"
 )
 
-// GET key
-var execGet = ExecFunc(func(d *DB, args db.CmdLine) resp.Reply {
-	if len(args) != 1 {
-		return reply.NewArgNumErrReply(enum.GET.String())
-	}
-
-	key := string(args[0])
-	entity, ok := d.GetEntity(key)
+// execGet 获取key对应的value
+//
+// 格式: get key, 例如: get jack
+//
+// 返回key对应的value
+func execGet(d *DB, args db.Params) resp.Reply {
+	key := utils.Bytes2String(args[0])
+	entity, ok := d.getEntity(key)
 	if !ok {
 		return reply.NewNullBulkReply()
 	}
@@ -26,45 +27,45 @@ var execGet = ExecFunc(func(d *DB, args db.CmdLine) resp.Reply {
 	}
 
 	return reply.NewBulkReply(value)
-})
+}
 
-// SET key value
-var execSet = ExecFunc(func(d *DB, args db.CmdLine) resp.Reply {
-	if len(args) != 2 {
-		return reply.NewArgNumErrReply(enum.SET.String())
-	}
-
-	key := string(args[0])
+// execSet 设置key-value
+//
+// 格式: set key value, 例如: set name jack
+//
+// 成功返回OK
+func execSet(d *DB, args db.Params) resp.Reply {
+	key := utils.Bytes2String(args[0])
 	value := args[1]
-	d.PutEntity(key, db.NewDataEntity(value))
+	d.putEntity(key, db.NewDataEntity(value))
 	d.append(utils.ToCmdLine2(enum.SET.String(), args...))
 
 	return reply.NewOKReply()
-})
+}
 
-// SETNX key value
-var execSetNX = ExecFunc(func(d *DB, args db.CmdLine) resp.Reply {
-	if len(args) != 2 {
-		return reply.NewArgNumErrReply(enum.SETNX.String())
-	}
-
-	key := string(args[0])
+// execSetNX
+func execSetNX(d *DB, args db.Params) resp.Reply {
+	key := utils.Bytes2String(args[0])
 	value := args[1]
-	n := d.PutIfAbsent(key, db.NewDataEntity(value))
+	n := d.putIfAbsent(key, db.NewDataEntity(value))
 	d.append(utils.ToCmdLine2(enum.SETNX.String(), args...))
 
 	return reply.NewIntReply(int64(n))
-})
+}
 
-var execGetSet = ExecFunc(func(d *DB, args db.CmdLine) resp.Reply {
-	if len(args) != 2 {
-		return reply.NewArgNumErrReply(enum.GETSET.String())
-	}
-	key := string(args[0])
+// execGetSEt 命令用于设置指定 key 的值，并返回 key 的旧值。
+//
+// 格式: GETSET KEY_NAME VALUE
+//
+// 返回给定 key 的旧值。 当 key 没有旧值时，即 key 不存在时，返回 nil
+//
+// 当 key 存在但不是字符串类型时，返回一个错误。
+func execGetSet(d *DB, args db.Params) resp.Reply {
+	key := utils.Bytes2String(args[0])
 	value := args[1]
 
-	entity, ok := d.GetEntity(key)
-	d.PutEntity(key, db.NewDataEntity(value))
+	entity, ok := d.getEntity(key)
+	d.putEntity(key, db.NewDataEntity(value))
 	d.append(utils.ToCmdLine2(enum.GETSET.String(), args...))
 
 	if !ok {
@@ -77,12 +78,14 @@ var execGetSet = ExecFunc(func(d *DB, args db.CmdLine) resp.Reply {
 	}
 
 	return reply.NewBulkReply(oldValue)
-})
+}
 
-// STRLEN key
-var execStrLen = ExecFunc(func(d *DB, args db.CmdLine) resp.Reply {
-	key := string(args[0])
-	entity, ok := d.GetEntity(key)
+// execStrLen 命令用于获取指定 key 所储存的字符串值的长度。当 key 储存的不是字符串值时，返回一个错误。
+//
+// 返回字符串值的长度。 当 key 不存在时，返回 0。
+func execStrLen(d *DB, args db.Params) resp.Reply {
+	key := utils.Bytes2String(args[0])
+	entity, ok := d.getEntity(key)
 	if !ok {
 		return reply.NewNullBulkReply()
 	}
@@ -93,14 +96,23 @@ var execStrLen = ExecFunc(func(d *DB, args db.CmdLine) resp.Reply {
 	}
 
 	return reply.NewWrongTypeErrReply()
-})
+}
 
-// execIncr INCR key
-var execIncr = ExecFunc(func(d *DB, args db.CmdLine) resp.Reply {
-	key := string(args[0])
-	entity, ok := d.GetEntity(key)
+// execIncr 命令将 key 中储存的数字值增一。如果 key 不存在，那么 key 的值会先被初始化为 0 ，然后再执行 INCR 操作。
+//
+// 如果值包含错误的类型，或字符串类型的值不能表示为数字，那么返回一个错误。
+//
+// 本操作的值限制在 64 位(bit)有符号数字表示之内。
+//
+// 格式: INCR KEY_NAME
+//
+// 返回: 执行 INCR 命令之后 key 的值。
+func execIncr(d *DB, args db.Params) resp.Reply {
+	key := utils.Bytes2String(args[0])
+	entity, ok := d.getEntity(key)
 	if !ok {
-		d.PutEntity(key, db.NewDataEntity(utils.String2Bytes("1")))
+		d.putEntity(key, db.NewDataEntity(utils.String2Bytes("1")))
+		d.append(utils.ToCmdLine2(enum.INCR.String(), args...))
 		return reply.NewIntReply(1)
 	}
 	value, ok := entity.Data.([]byte)
@@ -115,16 +127,57 @@ var execIncr = ExecFunc(func(d *DB, args db.CmdLine) resp.Reply {
 
 	num++
 	entity.Data = utils.String2Bytes(strconv.Itoa(num))
-	d.PutEntity(key, entity)
+	d.putEntity(key, entity)
+
+	d.append(utils.ToCmdLine2(enum.INCR.String(), args...))
 
 	return reply.NewIntReply(int64(num))
-})
+}
+
+// Redis Decr 命令将 key 中储存的数字值减一。
+//
+// 如果 key 不存在，那么 key 的值会先被初始化为 0 ，然后再执行 DECR 操作。
+//
+// 如果值包含错误的类型，或字符串类型的值不能表示为数字，那么返回一个错误。
+//
+// 本操作的值限制在 64 位(bit)有符号数字表示之内。
+//
+// 格式: DECR KEY_NAME
+//
+// 返回: 执行命令之后 key 的值。
+func execDecr(d *DB, args db.Params) resp.Reply {
+	key := utils.Bytes2String(args[0])
+	entity, ok := d.getEntity(key)
+	if !ok {
+		d.putEntity(key, db.NewDataEntity(utils.String2Bytes("-1")))
+		d.append(utils.ToCmdLine2(enum.DECR.String(), args...))
+		return reply.NewIntReply(-1)
+	}
+	value, ok := entity.Data.([]byte)
+	if !ok {
+		return reply.NewWrongTypeErrReply()
+	}
+
+	num, err := strconv.Atoi(utils.Bytes2String(value))
+	if err != nil {
+		return reply.NewIntErrReply()
+	}
+
+	num--
+	entity.Data = utils.String2Bytes(strconv.Itoa(num))
+	d.putEntity(key, entity)
+
+	d.append(utils.ToCmdLine2(enum.DECR.String(), args...))
+
+	return reply.NewIntReply(int64(num))
+}
 
 func init() {
-	RegisterCommand(enum.GET, execGet)
-	RegisterCommand(enum.SET, execSet)
-	RegisterCommand(enum.SETNX, execSetNX)
-	RegisterCommand(enum.GETSET, execGetSet)
-	RegisterCommand(enum.STRLEN, execStrLen)
-	RegisterCommand(enum.INCR, execIncr)
+	registerCommand(enum.GET, readFirstKey, execGet)
+	registerCommand(enum.SET, writeFirstKey, execSet)
+	registerCommand(enum.SETNX, writeFirstKey, execSetNX)
+	registerCommand(enum.GETSET, writeFirstKey, execGetSet)
+	registerCommand(enum.STRLEN, readFirstKey, execStrLen)
+	registerCommand(enum.INCR, writeFirstKey, execIncr)
+	registerCommand(enum.DECR, writeFirstKey, execDecr)
 }

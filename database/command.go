@@ -1,17 +1,23 @@
 package database
 
 import (
-	"go-redis/enum"
 	"strings"
+
+	"go-redis/enum"
 )
 
 var cmdTable = make(map[string]*command)
 
 type command struct {
-	executor ExecFunc // 命令执行函数
+	executor execFunc // 命令执行函数
+	prepare  preFunc  // 执行命令之前的准备函数
 	arity    int      // 带命令本身的参数数量
 }
 
-func RegisterCommand(cmd *enum.Command, executor ExecFunc) {
-	cmdTable[strings.ToLower(cmd.Name())] = &command{executor: executor, arity: cmd.Arity()}
+func registerCommand(cmd *enum.Command, prepare preFunc, executor execFunc) {
+	cmdTable[strings.ToLower(cmd.Name())] = &command{
+		executor,
+		prepare,
+		cmd.Arity(),
+	}
 }

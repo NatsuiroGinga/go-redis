@@ -7,7 +7,7 @@ import (
 	"go-redis/resp/reply"
 )
 
-var flushdb = CmdFunc(func(clusterDatabase *ClusterDatabase, connection resp.Connection, args db.CmdLine) resp.Reply {
+var flushdb = cmdFunc(func(clusterDatabase *ClusterDatabase, connection resp.Connection, args db.CmdLine) resp.Reply {
 	if len(args) != 1 {
 		return reply.NewArgNumErrReply(enum.FLUSHDB.String())
 	}

@@ -1,14 +1,14 @@
 package resp
 
-// Reply is an interface that represents a reply to a client.
-// Bytes returns the reply as a byte slice.
+// Reply 是一个给客户端回复的接口
 type Reply interface {
+	// Bytes 返回一个字节数组的回复, 使用resp格式
 	Bytes() []byte
 }
 
-// ErrorReply is an interface that represents an error reply to a client.
-// Error returns the error message.
+// ErrorReply 是一个给客户端错误回复的接口
 type ErrorReply interface {
 	Reply
+	// Error 只返回错误信息, 不使用resp格式
 	Error() string
 }

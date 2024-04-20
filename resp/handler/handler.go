@@ -2,6 +2,13 @@ package handler
 
 import (
 	"context"
+	"errors"
+	"io"
+	"net"
+	"strings"
+	"sync"
+	"sync/atomic"
+
 	cluster_database "go-redis/cluster"
 	"go-redis/config"
 	database2 "go-redis/database"
@@ -12,11 +19,6 @@ import (
 	"go-redis/resp/connection"
 	"go-redis/resp/parser"
 	"go-redis/resp/reply"
-	"io"
-	"net"
-	"strings"
-	"sync"
-	"sync/atomic"
 )
 
 // RespHandler is the handler of RESP protocol.
@@ -59,11 +61,11 @@ func (rh *RespHandler) Handle(_ context.Context, conn net.Conn) {
 		if payload.Err != nil {
 			// if client closed, close the connection
 			if payload.Err == io.EOF ||
-				payload.Err == io.ErrUnexpectedEOF ||
+				errors.Is(payload.Err, io.ErrUnexpectedEOF) ||
 				strings.Contains(payload.Err.Error(), enum.CONNECTION_CLOSED.Error()) {
 
 				rh.closeClient(client)
-				go logger.Info("client closed:" + client.RemoteAddr().String())
+				go logger.Info("client closed:", client.RemoteAddr())
 				return
 			}
 			// protocol error
@@ -71,7 +73,7 @@ func (rh *RespHandler) Handle(_ context.Context, conn net.Conn) {
 
 			if err != nil {
 				rh.closeClient(client)
-				go logger.Info("client closed:" + client.RemoteAddr().String())
+				go logger.Info("client closed:", client.RemoteAddr())
 				return
 			}
 

@@ -2,6 +2,8 @@ package utils
 
 import (
 	"bytes"
+
+	"go-redis/lib/logger"
 )
 
 // ToCmdLine convert strings to [][]byte
@@ -13,7 +15,7 @@ func ToCmdLine(cmd ...string) [][]byte {
 	return args
 }
 
-// ToCmdLine2 convert commandName and []byte-type argument to CmdLine
+// ToCmdLine2 convert commandName and []byte-type arguments to CmdLine
 func ToCmdLine2(commandName string, args ...[]byte) [][]byte {
 	result := make([][]byte, len(args)+1)
 	result[0] = String2Bytes(commandName)
@@ -23,9 +25,28 @@ func ToCmdLine2(commandName string, args ...[]byte) [][]byte {
 	return result
 }
 
+func ToCmdLine3(cmd []byte) [][]byte {
+	params := bytes.Split(cmd, String2Bytes(" "))
+	result := make([][]byte, len(params))
+	for i, s := range params {
+		result[i] = s
+	}
+	return result
+}
+
 // BytesEquals check whether the given bytes is equal
 func BytesEquals(a, b []byte) bool {
 	return bytes.Compare(a, b) == 0
+}
+
+// Equals check whether the given value is equal
+func Equals(a, b any) bool {
+	sliceA, okA := a.([]byte)
+	sliceB, okB := b.([]byte)
+	if okA && okB {
+		return BytesEquals(sliceA, sliceB)
+	}
+	return a == b
 }
 
 // If returns trueVal if condition is true, otherwise falseVal.
@@ -44,4 +65,10 @@ func If2Kinds(condition bool, trueVal, falseVal any) any {
 		return trueVal
 	}
 	return falseVal
+}
+
+func Assert(condition bool) {
+	if !condition {
+		logger.Fatal("assertion failed")
+	}
 }

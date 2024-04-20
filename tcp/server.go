@@ -2,13 +2,14 @@ package tcp
 
 import (
 	"context"
-	"go-redis/interface/tcp"
-	"go-redis/lib/logger"
 	"net"
 	"os"
 	"os/signal"
 	"sync"
 	"syscall"
+
+	"go-redis/interface/tcp"
+	"go-redis/lib/logger"
 )
 
 // Config defines the configuration for the tcp server.
@@ -45,7 +46,7 @@ func ListenAndServeWithSignal(cfg *Config, handler tcp.Handler) error {
 
 	go logger.Info("tcp server start listening on", cfg.Address)
 	// handle the connection in a new goroutine.
-	err = ListenAndServe(listen, handler, closeChan)
+	err = listenAndServe(listen, handler, closeChan)
 
 	if err != nil {
 		return err
@@ -54,9 +55,9 @@ func ListenAndServeWithSignal(cfg *Config, handler tcp.Handler) error {
 	return nil
 }
 
-// ListenAndServe listens on the TCP network address addr and then
+// listenAndServe listens on the TCP network address addr and then
 // calls Serve to handle requests on incoming connections.
-func ListenAndServe(listener net.Listener, handler tcp.Handler, closeChan <-chan struct{}) error {
+func listenAndServe(listener net.Listener, handler tcp.Handler, closeChan <-chan struct{}) error {
 	go func() {
 		// wait for the close signal.
 		<-closeChan
@@ -79,7 +80,7 @@ func ListenAndServe(listener net.Listener, handler tcp.Handler, closeChan <-chan
 			break
 		}
 
-		go logger.Info("accept a new connection")
+		go logger.Info("accept a new connection:", conn.RemoteAddr())
 		// handle the connection in a new goroutine.
 		wg.Add(1)
 
