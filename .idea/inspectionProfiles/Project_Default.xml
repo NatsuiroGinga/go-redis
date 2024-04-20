@@ -5,6 +5,9 @@
       <functions>
         <function importPath="net" name="Dial" />
       </functions>
+      <methods>
+        <method importPath="go-redis/database" receiver="*DB" name="getOrCreateIntSet" />
+      </methods>
     </inspection_tool>
     <inspection_tool class="GoSnakeCaseUsage" enabled="false" level="WEAK WARNING" enabled_by_default="false" />
     <inspection_tool class="GoUnhandledErrorResult" enabled="true" level="WARNING" enabled_by_default="true">

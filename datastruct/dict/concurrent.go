@@ -233,6 +233,9 @@ func (dict *ConcurrentDict) RandomKeys(n int) (keys []string) {
 	if dict == nil {
 		logger.Fatal(enum.DICT_IS_NIL)
 	}
+	if n < 0 {
+		return nil
+	}
 	// 1. 检查所需key的数量是否大于字典现存的key数量
 	if n >= dict.Len() {
 		return dict.Keys()
@@ -272,6 +275,9 @@ func (shard *shard) RandomKey() string {
 }
 
 func (dict *ConcurrentDict) RandomDistinctKeys(n int) (keys []string) {
+	if n < 0 {
+		return nil
+	}
 	size := dict.Len()
 	if n >= size {
 		return dict.Keys()

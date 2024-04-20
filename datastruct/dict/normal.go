@@ -87,6 +87,12 @@ func (nd *NormalDict) Keys() (keys []string) {
 }
 
 func (nd *NormalDict) RandomKeys(n int) (keys []string) {
+	if n < 0 {
+		return nil
+	}
+	if n > nd.Len() {
+		n = nd.Len()
+	}
 	keys = make([]string, n)
 	for i := 0; i < n; i++ {
 		for k := range nd.m {
@@ -98,6 +104,9 @@ func (nd *NormalDict) RandomKeys(n int) (keys []string) {
 }
 
 func (nd *NormalDict) RandomDistinctKeys(n int) (keys []string) {
+	if n < 0 {
+		return nil
+	}
 	size := n
 	if size > len(nd.m) {
 		size = len(nd.m)

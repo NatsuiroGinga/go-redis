@@ -20,16 +20,17 @@ func fileExists(filename string) bool {
 
 // ServerProperties defines global config properties
 type ServerProperties struct {
-	Bind             string `cfg:"bind"`                // 绑定的ip, 默认127.0.0.1
-	Port             int    `cfg:"port"`                // 端口, 默认6379
-	AppendOnly       bool   `cfg:"append-only"`         // 是否启动aof, 默认不启动
-	AppendFilename   string `cfg:"append-filename"`     // aof文件名, 默认redis.conf
-	MaxClients       int    `cfg:"max-clients"`         // 最大客户端数
-	RequirePass      string `cfg:"require-pass"`        // 需要密码
-	Databases        int    `cfg:"databases"`           // 数据库量,  默认16
-	Cycle            int    `cfg:"cycle"`               // 清理过期数据的周期, 单位是s, 默认1s
-	Buckets          int    `cfg:"buckets"`             // 放数据的桶的数量, 默认65536
-	ListMaxShardSize int    `cfg:"list-max-shard-size"` // quicklist中每一个分片所存储的数据最大容量, 默认8kb
+	Bind                string `cfg:"bind"`                   // 绑定的ip, 默认127.0.0.1
+	Port                int    `cfg:"port"`                   // 端口, 默认6379
+	AppendOnly          bool   `cfg:"append-only"`            // 是否启动aof, 默认不启动
+	AppendFilename      string `cfg:"append-filename"`        // aof文件名, 默认redis.conf
+	MaxClients          int    `cfg:"max-clients"`            // 最大客户端数
+	RequirePass         string `cfg:"require-pass"`           // 需要密码
+	Databases           int    `cfg:"databases"`              // 数据库量,  默认16
+	Cycle               int    `cfg:"cycle"`                  // 清理过期数据的周期, 单位是s, 默认1s
+	Buckets             int    `cfg:"buckets"`                // 放数据的桶的数量, 默认65536
+	ListMaxShardSize    int    `cfg:"list-max-shard-size"`    // quicklist中每一个分片所存储的数据最大容量, 默认8kb
+	SetMaxIntSetEntries int    `cfg:"set-max-intset-entries"` // intset中可以存储的最大元素个数, 默认为512
 
 	Peers []string `cfg:"peers"`
 	Self  string   `cfg:"self"`
@@ -41,13 +42,14 @@ var Properties *ServerProperties
 func init() {
 	// default config
 	Properties = &ServerProperties{
-		Bind:             "127.0.0.1",
-		Port:             6379,
-		AppendOnly:       false,
-		Cycle:            1,
-		Buckets:          1 << 16,
-		ListMaxShardSize: 8 << 10,
-		Databases:        1 << 4,
+		Bind:                "127.0.0.1",
+		Port:                6379,
+		AppendOnly:          false,
+		Cycle:               1,
+		Buckets:             1 << 16,
+		ListMaxShardSize:    8 << 10,
+		Databases:           1 << 4,
+		SetMaxIntSetEntries: 512,
 	}
 
 	if fileExists(configFile) {

@@ -11,26 +11,26 @@ import (
 	"go-redis/resp/reply"
 )
 
-func (d *DB) getSet(key string) (*set.Set, resp.ErrorReply) {
+func (d *DB) getHashSet(key string) (*set.HashSet, resp.ErrorReply) {
 	entity, exists := d.getEntity(key)
 	if !exists {
 		return nil, nil
 	}
-	hashSet, ok := entity.Data.(*set.Set)
+	hashSet, ok := entity.Data.(*set.HashSet)
 	if !ok {
 		return nil, reply.NewWrongTypeErrReply()
 	}
 	return hashSet, nil
 }
 
-func (d *DB) getOrCreateSet(key string) (hashSet *set.Set, create bool, errorReply resp.ErrorReply) {
-	hashSet, errorReply = d.getSet(key)
+func (d *DB) getOrCreateHashSet(key string) (hashSet *set.HashSet, create bool, errorReply resp.ErrorReply) {
+	hashSet, errorReply = d.getHashSet(key)
 	if errorReply != nil {
 		return nil, false, errorReply
 	}
 	create = false
 	if hashSet == nil {
-		hashSet = set.NewSet()
+		hashSet = set.NewHashSet()
 		d.putEntity(key, db.NewDataEntity(hashSet))
 		create = true
 	}
@@ -47,10 +47,10 @@ func (d *DB) getOrCreateSet(key string) (hashSet *set.Set, create bool, errorRep
 //
 // 返回: 被添加到集合中的新元素的数量，不包括被忽略的元素。
 func execSAdd(d *DB, args db.Params) resp.Reply {
-	key := string(args[0])
+	key := utils.Bytes2String(args[0])
 	members := args[1:]
 
-	hashSet, _, errReply := d.getOrCreateSet(key)
+	hashSet, _, errReply := d.getOrCreateHashSet(key)
 	if errReply != nil {
 		return errReply
 	}
@@ -62,6 +62,21 @@ func execSAdd(d *DB, args db.Params) resp.Reply {
 	return reply.NewIntReply(int64(counter))
 }
 
+// getNums 从参数中获取数字类型, 并返回列表
+//
+// 如果参数全是数字, 返回true, 否则返回false
+func getNums(members [][]byte) (isAllNums bool, nums []int64) {
+	nums = make([]int64, len(members))
+	for i, member := range members {
+		parseInt, err := strconv.ParseInt(utils.Bytes2String(member), 10, 64)
+		if err != nil {
+			return false, nil
+		}
+		nums[i] = parseInt
+	}
+	return true, nums
+}
+
 // execSIsMember 命令判断成员元素是否是集合的成员。
 //
 // # SISMEMBER KEY VALUE
@@ -71,7 +86,7 @@ func execSIsMember(d *DB, args db.Params) resp.Reply {
 	key := utils.Bytes2String(args[0])
 	member := utils.Bytes2String(args[1])
 
-	hashSet, errReply := d.getSet(key)
+	hashSet, errReply := d.getHashSet(key)
 	if errReply != nil {
 		return errReply
 	}
@@ -93,7 +108,7 @@ func execSRem(d *DB, args db.Params) resp.Reply {
 	key := utils.Bytes2String(args[0])
 	members := args[1:]
 
-	hashSet, errReply := d.getSet(key)
+	hashSet, errReply := d.getHashSet(key)
 	if errReply != nil {
 		return errReply
 	}
@@ -124,7 +139,7 @@ func execSPop(d *DB, args db.Params) resp.Reply {
 	}
 	key := utils.Bytes2String(args[0])
 
-	hashSet, errReply := d.getSet(key)
+	hashSet, errReply := d.getHashSet(key)
 	if errReply != nil {
 		return errReply
 	}
@@ -134,7 +149,8 @@ func execSPop(d *DB, args db.Params) resp.Reply {
 
 	count := 1
 	if len(args) == 2 {
-		count, err := strconv.Atoi(utils.Bytes2String(args[1]))
+		var err error
+		count, err = strconv.Atoi(utils.Bytes2String(args[1]))
 		if err != nil || count <= 0 {
 			return reply.NewErrReply("value is out of range, must be positive")
 		}
@@ -164,7 +180,7 @@ func execSPop(d *DB, args db.Params) resp.Reply {
 func execSCard(d *DB, args db.Params) resp.Reply {
 	key := utils.Bytes2String(args[0])
 
-	hashSet, errReply := d.getSet(key)
+	hashSet, errReply := d.getHashSet(key)
 	if errReply != nil {
 		return errReply
 	}
@@ -174,7 +190,7 @@ func execSCard(d *DB, args db.Params) resp.Reply {
 	return reply.NewIntReply(int64(hashSet.Len()))
 }
 
-func set2Reply(hashSet *set.Set) resp.Reply {
+func set2Reply(hashSet *set.HashSet) resp.Reply {
 	arr := make([][]byte, 0, hashSet.Len())
 	hashSet.ForEach(func(member string) bool {
 		arr = append(arr, utils.String2Bytes(member))
@@ -306,7 +322,7 @@ func execSRandMember(d *DB, args db.Params) resp.Reply {
 	}
 	key := utils.Bytes2String(args[0])
 
-	hashSet, errReply := d.getSet(key)
+	hashSet, errReply := d.getHashSet(key)
 	if errReply != nil {
 		return errReply
 	}
@@ -347,7 +363,7 @@ func execSRandMember(d *DB, args db.Params) resp.Reply {
 func execSMembers(d *DB, args db.Params) resp.Reply {
 	key := string(args[0])
 
-	hashSet, errReply := d.getSet(key)
+	hashSet, errReply := d.getHashSet(key)
 	if errReply != nil {
 		return errReply
 	}
@@ -366,11 +382,11 @@ func execSMembers(d *DB, args db.Params) resp.Reply {
 }
 
 // getSets 获取参数中的所有key对应的set, 返回一个set切片
-func getSets(d *DB, args db.Params) ([]*set.Set, resp.ErrorReply) {
-	sets := make([]*set.Set, 0, len(args))
+func getSets(d *DB, args db.Params) ([]*set.HashSet, resp.ErrorReply) {
+	sets := make([]*set.HashSet, 0, len(args))
 	for _, arg := range args {
 		key := utils.Bytes2String(arg)
-		hashSet, errReply := d.getSet(key)
+		hashSet, errReply := d.getHashSet(key)
 		if errReply != nil {
 			return nil, errReply
 		}

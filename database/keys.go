@@ -69,7 +69,7 @@ func execType(d *DB, args db.Params) resp.Reply {
 	}
 
 	switch entity.Data.(type) {
-	case []byte, string: // string
+	case []byte, string:
 		return reply.NewStatusReply(enum.TYPE_STRING.String())
 	case sortedset.SortedSet:
 		return reply.NewStatusReply(enum.TYPE_ZSET.String())
@@ -77,7 +77,7 @@ func execType(d *DB, args db.Params) resp.Reply {
 		return reply.NewStatusReply(enum.TYPE_LIST.String())
 	case dict.Dict:
 		return reply.NewStatusReply(enum.TYPE_HASH.String())
-	case *set.Set:
+	case *set.HashSet:
 		return reply.NewStatusReply(enum.TYPE_SET.String())
 	default:
 		return reply.NewUnknownErrReply()

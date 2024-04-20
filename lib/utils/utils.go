@@ -28,15 +28,13 @@ func ToCmdLine2(commandName string, args ...[]byte) [][]byte {
 func ToCmdLine3(cmd []byte) [][]byte {
 	params := bytes.Split(cmd, String2Bytes(" "))
 	result := make([][]byte, len(params))
-	for i, s := range params {
-		result[i] = s
-	}
+	copy(result, params)
 	return result
 }
 
 // BytesEquals check whether the given bytes is equal
 func BytesEquals(a, b []byte) bool {
-	return bytes.Compare(a, b) == 0
+	return bytes.Equal(a, b)
 }
 
 // Equals check whether the given value is equal

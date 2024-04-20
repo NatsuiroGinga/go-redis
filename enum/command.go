@@ -122,7 +122,7 @@ var (
 	SISMEMBER   = &Command{name: "SISMEMBER", paramCount: 2}
 	SMEMBERS    = &Command{name: "SMEMBERS", paramCount: 1}
 	SMOVE       = &Command{name: "SMOVE", paramCount: 3}
-	SPOP        = &Command{name: "SPOP", paramCount: 1}
+	SPOP        = &Command{name: "SPOP", paramCount: -1}
 	SRANDMEMBER = &Command{name: "SRANDMEMBER", paramCount: -1}
 	SREM        = &Command{name: "SREM", paramCount: -2}
 	SUNION      = &Command{name: "SUNION", paramCount: -1}

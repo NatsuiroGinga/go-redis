@@ -1,11 +1,11 @@
 package utils
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 func TestToCmdLine3(t *testing.T) {
-	s := []byte("set name jack")
-	cmd := ToCmdLine3(s)
-	for _, b := range cmd {
-		t.Log(string(b))
-	}
+	timestamp := time.Unix(1713597327, 0)
+	t.Log(timestamp.Format("2006-01-02 15:04:05"))
 }

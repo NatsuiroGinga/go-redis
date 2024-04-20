@@ -119,7 +119,7 @@ func execLPop(d *DB, args db.Params) resp.Reply {
 	return reply.NewBulkReply(val)
 }
 
-// execLPush Redis Lpush 命令将一个或多个值插入到列表头部。
+// execLPush 将一个或多个值插入到列表头部。
 // 如果 key 不存在，一个空列表会被创建并执行 LPUSH 操作。 当 key 存在但不是列表类型时，返回一个错误。
 //
 // # LPUSH KEY_NAME VALUE1.. VALUEN
