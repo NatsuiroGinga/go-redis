@@ -1,42 +1,58 @@
 package set
 
 import (
+	"errors"
 	"fmt"
 	"math/rand"
+	"reflect"
 	"slices"
+	"sort"
 	"time"
 	"unsafe"
 )
 
 // IntSet 是一个整数集合，可以存储 int16, int32 或 int64 类型的整数
 type IntSet struct {
-	encoding uint32 // 表示当前存储的整数类型
-	length   uint32 // 集合中元素的数量
+	encoding int32  // 表示当前存储的整数类型
+	length   int32  // 集合中元素的数量
 	contents []byte // 存储元素的切片
 }
 
-func (set *IntSet) Add(value int64) int {
+// transVal2Int64 把整型数值转化为int64
+func transVal2Int64(val any) (int64, error) {
+	value := reflect.ValueOf(val)
+	if value.CanInt() {
+		return value.Int(), nil
+	}
+	return 0, errors.New("val is not int type")
+}
+
+// Add 接收int64类型的整数
+func (set *IntSet) Add(val any) int {
+	value, err := transVal2Int64(val)
+	if err != nil {
+		return 0
+	}
 	// 1. 确定新值的编码类型
 	newEncoding := getValEncoding(value)
 
 	// 2. 如果需要，升级现有元素
 	if newEncoding > set.encoding {
-		newContents := make([]byte, set.length*newEncoding)
-		for i := uint32(0); i < set.length; i++ {
-			val := set.get(int(i))
-			*(*int64)(unsafe.Pointer(&newContents[i*newEncoding])) = val
+		newContents := make([]byte, set.Len()*int(newEncoding))
+		for i := int32(0); i < int32(set.Len()); i++ {
+			*(*int64)(unsafe.Pointer(&newContents[i*newEncoding])) = set.get(int(i))
 		}
 		set.contents = newContents
 		set.encoding = newEncoding
 	}
-	// 3. 找到元素所在位置
+	// 3. 找到元素所在起始位置
 	found, pos := set.intsetSearch(value)
 	if found { // 3.1 元素已经存在, 不做插入, 返回
 		return 0
 	}
 
 	// 4. 添加新元素
-	set.contents = slices.Insert(set.contents, pos, make([]byte, newEncoding)...)
+	set.contents = slices.Insert(set.contents, pos*int(newEncoding), make([]byte, newEncoding)...)
 	switch newEncoding {
 	case 2:
 		*(*int16)(unsafe.Pointer(&set.contents[pos*2])) = int16(value)
@@ -51,29 +67,17 @@ func (set *IntSet) Add(value int64) int {
 	return 1
 }
 
-// intsetSearch 在 IntSet 中查找给定的整数值
+// intsetSearch 在 IntSet 中查找给定的整数值, 返回值在字节数组中的相对位置
 //
-// 如果找到了值, 返回下标; 否则返回可以插入值的位置
+// 值在字节数组中的真实起始下标应该使用 pos * encoding
+//
+// 如果找到了值, 返回相对位置; 否则返回可以插入值的相对位置
 func (set *IntSet) intsetSearch(value int64) (found bool, pos int) {
-	minIndex := 0
-	maxIndex := int(set.length) - 1
-	var mid int
-	var midVal int64
+	pos = sort.Search(set.Len(), func(i int) bool {
+		return set.get(i) >= value
+	})
 
-	for minIndex <= maxIndex {
-		mid = (minIndex + maxIndex) / 2
-		midVal = set.get(mid)
-
-		if midVal == value {
-			return true, mid // 找到值
-		} else if midVal < value {
-			minIndex = mid + 1
-		} else {
-			maxIndex = mid - 1
-		}
-	}
-
-	return false, minIndex // 没找到值，返回应该插入的位置
+	return pos < set.Len() && set.get(pos) == value, pos // 没找到值，返回应该插入的位置
 }
 
 // get 从 IntSet 中获取指定位置的整数值
@@ -101,8 +105,8 @@ func (set *IntSet) get(pos int) int64 {
 }
 
 // getValEncoding 获取元素的编码
-func getValEncoding(val int64) uint32 {
-	encoding := uint32(2)
+func getValEncoding(val int64) int32 {
+	encoding := int32(2)
 	if val > 0x7FFF || val < -0x8000 {
 		encoding = 4
 	}
@@ -112,18 +116,28 @@ func getValEncoding(val int64) uint32 {
 	return encoding
 }
 
-func (set *IntSet) Remove(val int64) int {
-	found, pos := set.intsetSearch(val)
+func (set *IntSet) Remove(val any) int {
+	value, err := transVal2Int64(val)
+	if err != nil {
+		return 0
+	}
+	found, pos := set.intsetSearch(value)
 	if !found {
 		return 0
 	}
-	set.contents = slices.Delete(set.contents, pos, pos+int(set.encoding))
+	start := pos * int(set.encoding)
+	stop := start + int(set.encoding)
+	set.contents = slices.Delete(set.contents, start, stop)
 	set.length--
 	return 1
 }
 
-func (set *IntSet) Contains(val int64) bool {
-	found, _ := set.intsetSearch(val)
+func (set *IntSet) Contains(val any) bool {
+	value, err := transVal2Int64(val)
+	if err != nil {
+		return false
+	}
+	found, _ := set.intsetSearch(value)
 	return found
 }
 
@@ -131,8 +145,8 @@ func (set *IntSet) Len() int {
 	return int(set.length)
 }
 
-func (set *IntSet) ForEach(consumer func(member int64) bool) {
-	for i := 0; i < int(set.length); i++ {
+func (set *IntSet) ForEach(consumer func(member any) bool) {
+	for i := 0; i < set.Len(); i++ {
 		val := set.get(i)
 		if !consumer(val) {
 			return
@@ -140,7 +154,7 @@ func (set *IntSet) ForEach(consumer func(member int64) bool) {
 	}
 }
 
-func (set *IntSet) RandomMembers(n int) []int64 {
+func (set *IntSet) RandomMembers(n int) any {
 	if n < 0 {
 		return nil
 	}
@@ -156,16 +170,16 @@ func (set *IntSet) RandomMembers(n int) []int64 {
 	return results
 }
 
-func (set *IntSet) ToSlice() []int64 {
+func (set *IntSet) ToSlice() any {
 	slice := make([]int64, 0, set.Len())
-	set.ForEach(func(member int64) bool {
-		slice = append(slice, member)
+	set.ForEach(func(member any) bool {
+		slice = append(slice, member.(int64))
 		return true
 	})
 	return slice
 }
 
-func (set *IntSet) RandomDistinctMembers(n int) []int64 {
+func (set *IntSet) RandomDistinctMembers(n int) any {
 	if n < 0 {
 		return nil
 	}
@@ -199,8 +213,8 @@ func NewIntSet() *IntSet {
 
 // Print 打印集合内容
 func (set *IntSet) print() {
-	fmt.Printf("IntSet encoding: %d-bit, length: %d, contents: ", set.encoding*8, set.length)
-	for i := uint32(0); i < set.length; i++ {
+	fmt.Printf("IntSet encoding: %d-bit, length: %d, contents: ", set.encoding*8, set.Len())
+	for i := 0; i < set.Len(); i++ {
 		var val any
 		switch set.encoding {
 		case 2:
@@ -213,4 +227,13 @@ func (set *IntSet) print() {
 		fmt.Printf("%d ", val)
 	}
 	fmt.Println()
+}
+
+func (set *IntSet) Clone() Set {
+	clone := NewIntSet()
+	set.ForEach(func(member any) bool {
+		clone.Add(member)
+		return true
+	})
+	return clone
 }
