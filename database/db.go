@@ -189,6 +189,8 @@ func (d *DB) expireIfNeeded(key string) bool {
 
 // validateArity 验证输入的命令参数是否与设定的命令的参数数量一致
 //
+// arity >= 1 或者 arity <= -1
+//
 // 如果命令是可变长参数, 则返回len(cmd) >= -arity的结果, 否则返回len(cmd) == arity的结果
 func validateArity(arity int, cmd db.CmdLine) bool {
 	argNum := len(cmd)

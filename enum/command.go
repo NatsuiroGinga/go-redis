@@ -1,5 +1,7 @@
 package enum
 
+import "go-redis/lib/utils"
+
 // Command 命令枚举
 type Command struct {
 	name       string // 命令名称
@@ -23,7 +25,7 @@ func (cmd *Command) ParamCount() int {
 
 // Arity 返回命令带命令本身的参数数量, 即 ParamCount() + 1
 func (cmd *Command) Arity() int {
-	return cmd.paramCount + 1
+	return utils.If(cmd.paramCount >= 0, cmd.paramCount+1, cmd.paramCount-1)
 }
 
 // keys
