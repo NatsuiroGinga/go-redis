@@ -134,7 +134,7 @@ type NormalErrReply struct {
 }
 
 func (reply *NormalErrReply) Bytes() []byte {
-	utils.String2Bytes(fmt.Sprintf("-%s\r\n", reply.Status))
+	return utils.String2Bytes(fmt.Sprintf("-%s\r\n", reply.Status))
 }
 
 func (reply *NormalErrReply) Error() string {
