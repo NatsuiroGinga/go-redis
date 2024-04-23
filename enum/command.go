@@ -31,14 +31,14 @@ func (cmd *Command) ParamCount() int {
 
 // Arity 返回命令带命令本身的参数数量, 即 ParamCount() + 1
 func (cmd *Command) Arity() int {
-	return cmd.paramCount + 1
+	return utils.If(cmd.paramCount >= 0, cmd.paramCount+1, cmd.paramCount-1)
 }
 
 // keys
 var (
-	DEL         = &Command{name: "DEL", paramCount: -2}
+	DEL         = &Command{name: "DEL", paramCount: -1}
 	PING        = &Command{name: "PING", paramCount: 0}
-	EXISTS      = &Command{name: "EXISTS", paramCount: -2}
+	EXISTS      = &Command{name: "EXISTS", paramCount: -1}
 	FLUSHDB     = &Command{name: "FLUSHDB", paramCount: 0}
 	TYPE        = &Command{name: "TYPE", paramCount: 1}
 	RENAME      = &Command{name: "RENAME", paramCount: 2}
@@ -144,6 +144,7 @@ var (
 	TX_EXEC    = &Command{name: "EXEC", paramCount: 0}
 	TX_DISCARD = &Command{name: "DISCARD", paramCount: 0}
 	TX_WATCH   = &Command{name: "WATCH", paramCount: -1}
+	TX_UNWATCH = &Command{name: "UNWATCH", paramCount: 0}
 )
 
 // Command flags
@@ -152,12 +153,4 @@ const (
 	ZSET_LIMIT       = "LIMIT"
 	LIST_BEFORE      = "BEFORE"
 	LIST_AFTER       = "AFTER"
-)
-
-// Command types
-const (
-	MULTI   = "multi"
-	DISCARD = "discard"
-	EXEC    = "exec"
-	WATCH   = "watch"
 )

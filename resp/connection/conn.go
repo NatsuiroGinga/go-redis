@@ -64,6 +64,10 @@ func (rc *RespConnection) SetMultiState(state bool) {
 	rc.flags |= flagMulti
 }
 
+func (rc *RespConnection) ClearWatching() {
+	rc.watching = nil
+}
+
 // EnqueueCmd  enqueues command of current transaction
 func (rc *RespConnection) EnqueueCmd(cmdLine db.CmdLine) {
 	rc.queue = append(rc.queue, cmdLine)

@@ -44,32 +44,38 @@ type DB struct {
 // Exec executes command within one database
 func (d *DB) Exec(conn resp.Connection, cmd db.CmdLine) resp.Reply {
 	// transaction control commands and other commands which cannot execute within transaction
-	cmdName := strings.ToLower(utils.Bytes2String(cmd[0]))
+	cmdName := strings.ToUpper(utils.Bytes2String(cmd[0]))
 
 	switch cmdName {
-	case enum.MULTI:
-		if len(cmd) != 1 {
+	case enum.TX_MULTI.String():
+		if !validateArity(enum.TX_MULTI.Arity(), cmd) {
 			return reply.NewArgNumErrReply(cmdName)
 		}
 		return StartMulti(conn)
-	case enum.DISCARD:
-		if len(cmd) != 1 {
+	case enum.TX_DISCARD.String():
+		if !validateArity(enum.TX_MULTI.Arity(), cmd) {
 			return reply.NewArgNumErrReply(cmdName)
 		}
 		return DiscardMulti(conn)
-	case enum.EXEC:
-		if len(cmd) != 1 {
+	case enum.TX_EXEC.String():
+		if !validateArity(enum.TX_EXEC.Arity(), cmd) {
 			return reply.NewArgNumErrReply(cmdName)
 		}
 		return execMulti(d, conn)
-	case enum.WATCH: // 执行watch命令
-		if !validateArity(-2, cmd) {
+	case enum.TX_WATCH.String(): // 执行watch命令
+		if !validateArity(enum.TX_WATCH.Arity(), cmd) {
 			return reply.NewArgNumErrReply(cmdName)
 		}
 		return Watch(d, conn, cmd[1:])
+	case enum.TX_UNWATCH.String():
+		if !validateArity(enum.TX_UNWATCH.Arity(), cmd) {
+			return reply.NewArgNumErrReply(cmdName)
+		}
+		return UnWatch(conn)
 	}
 	// 如果开始事务, 那么命令加入事务队列
-	if conn != nil && conn.InMultiState() {
+	// 注意: 过滤掉客户端发的心跳请求, 也就是PING命令
+	if conn != nil && conn.InMultiState() && cmdName != enum.PING.String() {
 		return EnqueueCmd(conn, cmd)
 	}
 	return d.execWithLock(cmd)
@@ -100,7 +106,7 @@ func Watch(d *DB, conn resp.Connection, keys db.Params) resp.Reply {
 
 // ExecMulti 执行事务中的多个命令
 //
-// 在multi使用之前要使用watch给键设置版本号
+// 在multi使用之前要使用watch给键设置版本号. 如果没有使用watch, 那么不保证隔离性
 func (d *DB) ExecMulti(conn resp.Connection) resp.Reply {
 	// 1. 准备事务中的命令会进行读写的键
 	writeKeys := make([]string, 0)
@@ -123,6 +129,7 @@ func (d *DB) ExecMulti(conn resp.Connection) resp.Reply {
 	d.RWLocks(writeKeys, readKeys)
 	defer d.RWUnLocks(writeKeys, readKeys)
 	// 4. 如果观察的键的版本号变化了, 舍弃此事务
+	// 注意: 如果执行multi之前没有执行watch, 那么此处watching为nil, 函数返回true. 不保证隔离性
 	if isWatchingChanged(d, watching) {
 		return reply.NewEmptyMultiBulkReply()
 	}
@@ -132,7 +139,8 @@ func (d *DB) ExecMulti(conn resp.Connection) resp.Reply {
 	undoCmdLines := make([][]db.CmdLine, 0, len(cmdLines))
 	for _, cmdLine := range cmdLines {
 		// 5.1 在命令执行前, 保存undo log
-		undoCmdLines = append(undoCmdLines, d.GetUndoLogs(cmdLine))
+		undoLogs := d.GetUndoLogs(cmdLine)
+		undoCmdLines = append(undoCmdLines, undoLogs)
 		// 5.2 保存一条命令的执行结果
 		result := d.exec(cmdLine)
 		// 5.3 如果命令的结果是错误
@@ -150,7 +158,7 @@ func (d *DB) ExecMulti(conn resp.Connection) resp.Reply {
 		d.addVersion(writeKeys...)
 		return reply.NewMultiRawReply(results)
 	}
-	// undo if aborted
+	// 7. 如果事务失败, 执行undo logs
 	size := len(undoCmdLines)
 	for i := size - 1; i >= 0; i-- {
 		curCmdLines := undoCmdLines[i]
@@ -158,7 +166,10 @@ func (d *DB) ExecMulti(conn resp.Connection) resp.Reply {
 			continue
 		}
 		for _, cmdLine := range curCmdLines {
-			d.exec(cmdLine)
+			r := d.exec(cmdLine)
+			if reply.IsErrReply(r) {
+				logger.Error(r.(resp.ErrorReply).Error())
+			}
 		}
 	}
 	return &reply.NormalErrReply{Status: "EXECABORT Transaction discarded because of previous errors."}
@@ -166,7 +177,7 @@ func (d *DB) ExecMulti(conn resp.Connection) resp.Reply {
 
 // isWatchingChanged 判断链接持有的关键字-版本号 和 底层数据库存储的关键字-版本号 是否一致, 并发不安全
 //
-// 如果不一致返回false, 一致则返回true
+// 如果不一致返回false, 一致 或者 watching为nil 则返回true
 func isWatchingChanged(d *DB, watching map[string]uint32) bool {
 	for key, ver := range watching {
 		currentVersion := d.GetVersion(key)
@@ -177,13 +188,19 @@ func isWatchingChanged(d *DB, watching map[string]uint32) bool {
 	return false
 }
 
-// DiscardMulti 用来取消一个事务
+// DiscardMulti 用来取消一个事务, 并清空命令队列和watching
 func DiscardMulti(conn resp.Connection) resp.Reply {
 	if !conn.InMultiState() {
 		return reply.NewErrReply("DISCARD without MULTI")
 	}
 	conn.ClearQueuedCmds()
 	conn.SetMultiState(false)
+	return reply.NewOKReply()
+}
+
+// UnWatch 取消watch命令对所有key的监视
+func UnWatch(conn resp.Connection) resp.Reply {
+	conn.ClearWatching()
 	return reply.NewOKReply()
 }
 
@@ -220,7 +237,8 @@ func (d *DB) execWithLock(cmd db.CmdLine) resp.Reply {
 	writeKeys, readKeys := com.prepare(cmd[1:])
 	d.RWLocks(writeKeys, readKeys)
 	defer d.RWUnLocks(writeKeys, readKeys)
-
+	// 5. 要修改的键的版本号加1
+	d.addVersion(writeKeys...)
 	return com.executor(d, cmd[1:])
 }
 

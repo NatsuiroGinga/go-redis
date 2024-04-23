@@ -25,6 +25,7 @@ type Connection interface {
 	EnqueueCmd([][]byte)
 	ClearQueuedCmds()
 	GetWatching() map[string]uint32
+	ClearWatching()
 	AddTxError(err error)
 	GetTxErrors() []error
 }

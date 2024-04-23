@@ -3,6 +3,7 @@ package database
 import (
 	"strconv"
 	"strings"
+	"time"
 
 	"go-redis/aof"
 	"go-redis/config"
@@ -18,6 +19,51 @@ import (
 type StandaloneDatabase struct {
 	dbSet      []*DB        // 数据库集合
 	aofHandler *aof.Handler // aof处理器
+}
+
+func (database *StandaloneDatabase) ExecWithLock(conn resp.Connection, cmdLine db.CmdLine) resp.Reply {
+	// TODO implement me
+	panic("implement me")
+}
+
+func (database *StandaloneDatabase) ExecMulti(conn resp.Connection, watching map[string]uint32, cmdLines []db.CmdLine) resp.Reply {
+	// TODO implement me
+	panic("implement me")
+}
+
+func (database *StandaloneDatabase) GetUndoLogs(dbIndex int, cmdLine [][]byte) []db.CmdLine {
+	// TODO implement me
+	panic("implement me")
+}
+
+func (database *StandaloneDatabase) ForEach(dbIndex int, cb func(key string, data *db.DataEntity, expiration *time.Time) bool) {
+	// TODO implement me
+	panic("implement me")
+}
+
+func (database *StandaloneDatabase) RWLocks(dbIndex int, writeKeys []string, readKeys []string) {
+	// TODO implement me
+	panic("implement me")
+}
+
+func (database *StandaloneDatabase) RWUnLocks(dbIndex int, writeKeys []string, readKeys []string) {
+	// TODO implement me
+	panic("implement me")
+}
+
+func (database *StandaloneDatabase) GetDBSize(dbIndex int) (int, int) {
+	// TODO implement me
+	panic("implement me")
+}
+
+func (database *StandaloneDatabase) GetEntity(dbIndex int, key string) (*db.DataEntity, bool) {
+	// TODO implement me
+	panic("implement me")
+}
+
+func (database *StandaloneDatabase) GetExpiration(dbIndex int, key string) *time.Time {
+	// TODO implement me
+	panic("implement me")
 }
 
 func NewStandaloneDatabase() *StandaloneDatabase {

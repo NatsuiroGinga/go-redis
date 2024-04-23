@@ -2,6 +2,9 @@ package utils
 
 import (
 	"bytes"
+	"strings"
+
+	"go-redis/interface/db"
 )
 
 // ToCmdLine convert strings to [][]byte
@@ -71,8 +74,16 @@ func If2Kinds(condition bool, trueVal, falseVal any) any {
 	return falseVal
 }
 
-func Assert(condition bool) {
-	if !condition {
-		panic("assertion failed")
+func CmdLine2String(cmdLine db.CmdLine) string {
+	var builder strings.Builder
+	flag := false
+	for _, cmdBytes := range cmdLine {
+		if !flag {
+			flag = true
+		} else {
+			builder.WriteString(" ")
+		}
+		builder.Write(cmdBytes)
 	}
+	return builder.String()
 }

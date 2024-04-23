@@ -9,6 +9,7 @@ import (
 	"go-redis/enum"
 	"go-redis/interface/db"
 	"go-redis/interface/resp"
+	"go-redis/lib/asserts"
 	"go-redis/lib/utils"
 	"go-redis/resp/reply"
 )
@@ -63,7 +64,7 @@ func execLIndex(d *DB, args db.Params) resp.Reply {
 
 	// 3. 计算index
 	size := int64(l.Len())
-	utils.Assert(size > 0)
+	asserts.Assert(size > 0)
 	if index < -1*size {
 		return reply.NewNullBulkReply()
 	} else if index < 0 {
@@ -309,7 +310,7 @@ func execLSet(d *DB, args db.Params) resp.Reply {
 	}
 
 	size := l.Len()
-	utils.Assert(size > 0)
+	asserts.Assert(size > 0)
 	if index < -1*size {
 		return reply.NewErrReplyByError(enum.INDEX_OUT_OF_RANGE)
 	} else if index < 0 {
@@ -339,7 +340,7 @@ func undoLSet(d *DB, args db.Params) []db.CmdLine {
 	}
 
 	size := l.Len()
-	utils.Assert(size > 0)
+	asserts.Assert(size > 0)
 
 	if index < -1*size {
 		return nil

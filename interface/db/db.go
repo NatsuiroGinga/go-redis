@@ -2,6 +2,7 @@ package db
 
 import (
 	"io"
+	"time"
 
 	"go-redis/interface/resp"
 )
@@ -26,4 +27,18 @@ func NewDataEntity(data any) *DataEntity {
 	return &DataEntity{
 		Data: data,
 	}
+}
+
+// DBEngine is the embedding storage engine exposing more methods for complex application
+type DBEngine interface {
+	Database
+	ExecWithLock(conn resp.Connection, cmdLine CmdLine) resp.Reply
+	ExecMulti(conn resp.Connection, watching map[string]uint32, cmdLines []CmdLine) resp.Reply
+	GetUndoLogs(dbIndex int, cmdLine [][]byte) []CmdLine
+	ForEach(dbIndex int, cb func(key string, data *DataEntity, expiration *time.Time) bool)
+	RWLocks(dbIndex int, writeKeys []string, readKeys []string)
+	RWUnLocks(dbIndex int, writeKeys []string, readKeys []string)
+	GetDBSize(dbIndex int) (int, int)
+	GetEntity(dbIndex int, key string) (*DataEntity, bool)
+	GetExpiration(dbIndex int, key string) *time.Time
 }

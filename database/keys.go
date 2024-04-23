@@ -73,7 +73,7 @@ func execType(d *DB, args db.Params) resp.Reply {
 	key := utils.Bytes2String(args[0])
 	entity, ok := d.getEntity(key)
 	if !ok {
-		return reply.NewErrReply("none")
+		return reply.NewStatusReply("none")
 	}
 
 	switch entity.Data.(type) {
