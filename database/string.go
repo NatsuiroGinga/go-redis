@@ -173,11 +173,11 @@ func execDecr(d *DB, args db.Params) resp.Reply {
 }
 
 func init() {
-	registerCommand(enum.GET, readFirstKey, execGet)
-	registerCommand(enum.SET, writeFirstKey, execSet)
-	registerCommand(enum.SETNX, writeFirstKey, execSetNX)
-	registerCommand(enum.GETSET, writeFirstKey, execGetSet)
-	registerCommand(enum.STRLEN, readFirstKey, execStrLen)
-	registerCommand(enum.INCR, writeFirstKey, execIncr)
-	registerCommand(enum.DECR, writeFirstKey, execDecr)
+	registerCommand(enum.GET, readFirstKey, execGet, nil)
+	registerCommand(enum.SET, writeFirstKey, execSet, rollbackFirstKey)
+	registerCommand(enum.SETNX, writeFirstKey, execSetNX, rollbackFirstKey)
+	registerCommand(enum.GETSET, writeFirstKey, execGetSet, rollbackFirstKey)
+	registerCommand(enum.STRLEN, readFirstKey, execStrLen, nil)
+	registerCommand(enum.INCR, writeFirstKey, execIncr, rollbackFirstKey)
+	registerCommand(enum.DECR, writeFirstKey, execDecr, rollbackFirstKey)
 }

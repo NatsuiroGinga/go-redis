@@ -306,7 +306,7 @@ func execSInter(d *DB, args db.Params) resp.Reply {
 // 返回存储交集的集合的元素数量
 func execSInterStore(d *DB, args db.Params) resp.Reply {
 	dest := utils.Bytes2String(args[0])
-	sets, errReply := getSets(d, args)
+	sets, errReply := getSets(d, args[1:])
 	if errReply != nil {
 		return reply.NewIntReply(0)
 	}
@@ -466,7 +466,9 @@ func getSets(d *DB, args db.Params) ([]set.Set, resp.ErrorReply) {
 		if errReply != nil {
 			return nil, errReply
 		}
-		sets = append(sets, st)
+		if st != nil {
+			sets = append(sets, st)
+		}
 	}
 	return sets, nil
 }
@@ -490,18 +492,28 @@ func members2Bytes(st set.Set, members any) [][]byte {
 	return arr
 }
 
+func undoSet(d *DB, args db.Params) []db.CmdLine {
+	key := utils.Bytes2String(args[0])
+	params := args[1:]
+	members := make([]string, 0, len(params))
+	for _, param := range params {
+		members = append(members, utils.Bytes2String(param))
+	}
+	return rollbackSetMembers(d, key, members...)
+}
+
 func init() {
-	registerCommand(enum.SADD, writeFirstKey, execSAdd)
-	registerCommand(enum.SCARD, readFirstKey, execSCard)
-	registerCommand(enum.SDIFF, readFirstKey, execSDiff)
-	registerCommand(enum.SDIFFSTORE, prepareSetCalculateStore, execSDiffStore)
-	registerCommand(enum.SINTER, prepareSetCalculate, execSInter)
-	registerCommand(enum.SINTERSTORE, prepareSetCalculateStore, execSInterStore)
-	registerCommand(enum.SISMEMBER, readFirstKey, execSIsMember)
-	registerCommand(enum.SMEMBERS, readFirstKey, execSMembers)
-	registerCommand(enum.SPOP, writeFirstKey, execSPop)
-	registerCommand(enum.SRANDMEMBER, readFirstKey, execSRandMember)
-	registerCommand(enum.SREM, writeFirstKey, execSRem)
-	registerCommand(enum.SUNION, prepareSetCalculate, execSUnion)
-	registerCommand(enum.SUNIONSTORE, prepareSetCalculateStore, execSUnionStore)
+	registerCommand(enum.SADD, writeFirstKey, execSAdd, undoSet)
+	registerCommand(enum.SCARD, readFirstKey, execSCard, nil)
+	registerCommand(enum.SDIFF, readFirstKey, execSDiff, nil)
+	registerCommand(enum.SDIFFSTORE, prepareSetCalculateStore, execSDiffStore, rollbackFirstKey)   //
+	registerCommand(enum.SINTER, prepareSetCalculate, execSInter, nil)                             //
+	registerCommand(enum.SINTERSTORE, prepareSetCalculateStore, execSInterStore, rollbackFirstKey) //
+	registerCommand(enum.SISMEMBER, readFirstKey, execSIsMember, nil)                              //
+	registerCommand(enum.SMEMBERS, readFirstKey, execSMembers, nil)                                //
+	registerCommand(enum.SPOP, writeFirstKey, execSPop, undoSet)                                   //
+	registerCommand(enum.SRANDMEMBER, readFirstKey, execSRandMember, nil)                          //
+	registerCommand(enum.SREM, writeFirstKey, execSRem, undoSet)                                   //
+	registerCommand(enum.SUNION, prepareSetCalculate, execSUnion, nil)                             //
+	registerCommand(enum.SUNIONSTORE, prepareSetCalculateStore, execSUnionStore, rollbackFirstKey) //
 }

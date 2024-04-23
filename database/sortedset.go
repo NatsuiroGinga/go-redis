@@ -67,6 +67,16 @@ func execZAdd(d *DB, args db.Params) resp.Reply {
 	return reply.NewIntReply(i)
 }
 
+func undoZAdd(d *DB, args db.Params) []db.CmdLine {
+	key := utils.Bytes2String(args[0])
+	size := (len(args) - 1) / 2
+	fields := make([]string, size)
+	for i := 0; i < size; i++ {
+		fields[i] = utils.Bytes2String(args[2*i+2])
+	}
+	return rollbackZSetMembers(d, key, fields...)
+}
+
 // execZScore 命令返回有序集中，成员的分数值。 如果成员元素不是有序集 key 的成员，或 key 不存在，返回 nil 。
 //
 // # ZSCORE key member
@@ -179,7 +189,17 @@ func execZCount(d *DB, args db.Params) resp.Reply {
 	return reply.NewIntReply(sortedSet.RangeCount(minBorder, maxBorder))
 }
 
-// execZRange gets members in range, sort by score in ascending order
+// execZRange  返回有序集中，指定区间内的成员。
+//
+// 其中成员的位置按分数值递增(从小到大)来排序。
+//
+// 具有相同分数值的成员按字典序(lexicographical order )来排列。
+//
+// 下标参数 start 和 stop 都以 0 为底，也就是说，以 0 表示有序集第一个成员，以 1 表示有序集第二个成员，以此类推。
+//
+// 你也可以使用负数下标，以 -1 表示最后一个成员， -2 表示倒数第二个成员，以此类推。
+//
+// # ZRANGE key start stop [WITHSCORES]
 func execZRange(d *DB, args db.Params) resp.Reply {
 	return execGenericZRangeCommand(d, args, enum.ZRANGE)
 }
@@ -196,7 +216,7 @@ func execGenericZRangeCommand(d *DB, args db.Params, cmd *enum.Command) resp.Rep
 	}
 	withScores := false
 	if len(args) == 4 {
-		if utils.Bytes2String(args[3]) != enum.WITH_SCORES {
+		if !strings.EqualFold(utils.Bytes2String(args[3]), enum.ZSET_WITH_SCORES) {
 			return reply.NewSyntaxErrReply()
 		}
 		withScores = true
@@ -299,6 +319,16 @@ func execZRem(d *DB, args db.Params) resp.Reply {
 		d.append(utils.ToCmdLine2(enum.ZREM.String(), args...))
 	}
 	return reply.NewIntReply(deleted)
+}
+
+func undoZRem(d *DB, args db.Params) []db.CmdLine {
+	key := utils.Bytes2String(args[0])
+	fields := make([]string, len(args)-1)
+	fieldArgs := args[1:]
+	for i, v := range fieldArgs {
+		fields[i] = utils.Bytes2String(v)
+	}
+	return rollbackZSetMembers(d, key, fields...)
 }
 
 // execZRemRangeByScore removes members which score within given range
@@ -458,6 +488,12 @@ func execZIncrBy(d *DB, args db.Params) resp.Reply {
 	return reply.NewBulkReply(result)
 }
 
+func undoIncrBy(d *DB, args db.Params) []db.CmdLine {
+	key := utils.Bytes2String(args[0])
+	field := utils.Bytes2String(args[2])
+	return rollbackZSetMembers(d, key, field)
+}
+
 func range0(d *DB, key string, start, stop int64, withScores, desc bool) resp.Reply {
 	// get data
 	sortedSet, errReply := d.getSortedSet(key)
@@ -586,10 +622,10 @@ func getOptionalParameters(args db.Params) (withScores bool, offset, limit int64
 		for i := 3; i < len(args); {
 			s := utils.Bytes2String(args[i])
 			switch strings.ToUpper(s) {
-			case enum.WITH_SCORES:
+			case enum.ZSET_WITH_SCORES:
 				withScores = true
 				i++
-			case enum.LIMIT:
+			case enum.ZSET_LIMIT:
 				if len(args) < i+3 {
 					errReply = reply.NewSyntaxErrReply()
 					return
@@ -615,20 +651,20 @@ func getOptionalParameters(args db.Params) (withScores bool, offset, limit int64
 }
 
 func init() {
-	registerCommand(enum.ZADD, writeFirstKey, execZAdd)
-	registerCommand(enum.ZSCORE, readFirstKey, execZScore)
-	registerCommand(enum.ZINCRBY, writeFirstKey, execZIncrBy)
-	registerCommand(enum.ZRANK, readFirstKey, execZRank)
-	registerCommand(enum.ZCOUNT, readFirstKey, execZCount)
-	registerCommand(enum.ZREVRANK, readFirstKey, execZRevRank)
-	registerCommand(enum.ZCARD, readFirstKey, execZCard)
-	registerCommand(enum.ZRANGE, readFirstKey, execZRange)
-	registerCommand(enum.ZRANGEBYSCORE, readFirstKey, execZRangeByScore)
-	registerCommand(enum.ZREVRANGE, readFirstKey, execZRevRange)
-	registerCommand(enum.ZREVRANGEBYSCORE, readFirstKey, execZRevRangeByScore)
-	registerCommand(enum.ZPOPMIN, writeFirstKey, execZPopMin)
-	registerCommand(enum.ZPOPMAX, writeFirstKey, execZPopMax)
-	registerCommand(enum.ZREM, writeFirstKey, execZRem)
-	registerCommand(enum.ZREMRANGEBYSCORE, writeFirstKey, execZRemRangeByScore)
-	registerCommand(enum.ZREMRANGEBYRANK, writeFirstKey, execZRemRangeByRank)
+	registerCommand(enum.ZADD, writeFirstKey, execZAdd, undoZAdd)
+	registerCommand(enum.ZSCORE, readFirstKey, execZScore, nil)
+	registerCommand(enum.ZINCRBY, writeFirstKey, execZIncrBy, undoIncrBy)
+	registerCommand(enum.ZRANK, readFirstKey, execZRank, nil)
+	registerCommand(enum.ZCOUNT, readFirstKey, execZCount, nil)
+	registerCommand(enum.ZREVRANK, readFirstKey, execZRevRank, nil)
+	registerCommand(enum.ZCARD, readFirstKey, execZCard, nil)
+	registerCommand(enum.ZRANGE, readFirstKey, execZRange, nil)
+	registerCommand(enum.ZRANGEBYSCORE, readFirstKey, execZRangeByScore, nil)
+	registerCommand(enum.ZREVRANGE, readFirstKey, execZRevRange, nil)
+	registerCommand(enum.ZREVRANGEBYSCORE, readFirstKey, execZRevRangeByScore, nil)
+	registerCommand(enum.ZPOPMIN, writeFirstKey, execZPopMin, rollbackFirstKey)
+	registerCommand(enum.ZPOPMAX, writeFirstKey, execZPopMax, rollbackFirstKey)
+	registerCommand(enum.ZREM, writeFirstKey, execZRem, undoZRem)
+	registerCommand(enum.ZREMRANGEBYSCORE, writeFirstKey, execZRemRangeByScore, rollbackFirstKey)
+	registerCommand(enum.ZREMRANGEBYRANK, writeFirstKey, execZRemRangeByRank, rollbackFirstKey)
 }

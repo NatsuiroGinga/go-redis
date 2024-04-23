@@ -23,7 +23,7 @@ func TestExecSAdd(t *testing.T) {
 		"jack",
 		"lily",
 	)
-	reply := testDB.exec(args)
+	reply := testDB.execWithLock(args)
 	if errReply, ok := reply.(resp.ErrorReply); ok {
 		t.Error(errReply.Error())
 	} else {
@@ -38,7 +38,7 @@ func TestSAddOutOfLimit(t *testing.T) {
 		args = append(args, []byte(strconv.Itoa(i)))
 	}
 	args = append(args, []byte("jack"), []byte("bob"))
-	reply := testDB.exec(args)
+	reply := testDB.execWithLock(args)
 	if errReply, ok := reply.(resp.ErrorReply); ok {
 		t.Error(errReply.Error())
 	} else {
@@ -49,7 +49,7 @@ func TestSAddOutOfLimit(t *testing.T) {
 			t.Log("set type: intset", st)
 		} else {
 			t.Log("set type: hashset")
-			reply = testDB.exec(utils.ToCmdLine(enum.SMEMBERS.String(), "nums"))
+			reply = testDB.execWithLock(utils.ToCmdLine(enum.SMEMBERS.String(), "nums"))
 			t.Log(string(reply.Bytes()))
 		}
 	}
@@ -61,7 +61,7 @@ func TestSMembers(t *testing.T) {
 		enum.SMEMBERS.String(),
 		key,
 	)
-	reply := testDB.exec(args)
+	reply := testDB.execWithLock(args)
 	if errReply, ok := reply.(resp.ErrorReply); ok {
 		t.Error(errReply.Error())
 	} else {
@@ -78,7 +78,7 @@ func TestSMembers(t *testing.T) {
 func TestSRem(t *testing.T) {
 	TestExecSAdd(t)
 	args := utils.ToCmdLine(enum.SREM.String(), "nums", "jack", "1")
-	reply := testDB.exec(args)
+	reply := testDB.execWithLock(args)
 	if errReply, ok := reply.(resp.ErrorReply); ok {
 		t.Error(errReply.Error())
 	} else {
@@ -90,7 +90,7 @@ func TestSRem(t *testing.T) {
 func TestSIsMember(t *testing.T) {
 	TestExecSAdd(t)
 	args := utils.ToCmdLine(enum.SISMEMBER.String(), "nums", "32768")
-	reply := testDB.exec(args)
+	reply := testDB.execWithLock(args)
 	if errReply, ok := reply.(resp.ErrorReply); ok {
 		t.Error(errReply.Error())
 	} else {
@@ -101,7 +101,7 @@ func TestSIsMember(t *testing.T) {
 func TestSPop(t *testing.T) {
 	TestExecSAdd(t)
 	args := utils.ToCmdLine(enum.SPOP.String(), "nums", "2")
-	reply := testDB.exec(args)
+	reply := testDB.execWithLock(args)
 	if errReply, ok := reply.(resp.ErrorReply); ok {
 		t.Error(errReply.Error())
 	} else {
@@ -160,7 +160,7 @@ func TestSDiff(t *testing.T) {
 
 func TestRandomMembers(t *testing.T) {
 	TestExecSAdd(t)
-	reply := testDB.exec(utils.ToCmdLine(enum.SRANDMEMBER.String(), "nums", "2"))
+	reply := testDB.execWithLock(utils.ToCmdLine(enum.SRANDMEMBER.String(), "nums", "2"))
 	if errReply, ok := reply.(resp.ErrorReply); ok {
 		t.Error(errReply.Error())
 	} else {
@@ -168,6 +168,34 @@ func TestRandomMembers(t *testing.T) {
 	}
 }
 
-func TestSDiffStore(t *testing.T) {
-	TestSDiff(t)
+func TestSInterStore(t *testing.T) {
+	args := utils.ToCmdLine("sadd", "set1", "hello", "world")
+	reply := testDB.execWithLock(args)
+	t.Log(string(reply.Bytes()))
+	args = utils.ToCmdLine("sadd", "set2", "hello")
+	reply = testDB.execWithLock(args)
+	t.Log(string(reply.Bytes()))
+	args = utils.ToCmdLine("sinterstore", "dest", "set1", "set2")
+	reply = testDB.execWithLock(args)
+	t.Log(string(reply.Bytes()))
+}
+
+func TestUndoSet(t *testing.T) {
+	cmd := utils.ToCmdLine(
+		enum.SADD.String(),
+		"nums",
+		"1",
+		"2",
+		"3",
+		strconv.FormatInt(math.MaxInt16+1, 10),
+		strconv.FormatInt(math.MaxInt32+1, 10),
+		"jack",
+	)
+	testDB.execWithLock(cmd)
+	cmdLines := undoSet(testDB, cmd[1:])
+	for _, line := range cmdLines {
+		for _, bytes := range line {
+			t.Log(string(bytes))
+		}
+	}
 }

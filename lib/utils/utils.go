@@ -2,8 +2,6 @@ package utils
 
 import (
 	"bytes"
-
-	"go-redis/lib/logger"
 )
 
 // ToCmdLine convert strings to [][]byte
@@ -19,16 +17,24 @@ func ToCmdLine(cmd ...string) [][]byte {
 func ToCmdLine2(commandName string, args ...[]byte) [][]byte {
 	result := make([][]byte, len(args)+1)
 	result[0] = String2Bytes(commandName)
-	for i, s := range args {
-		result[i+1] = s
-	}
+	copy(result[1:], args)
 	return result
 }
 
 func ToCmdLine3(cmd []byte) [][]byte {
+	if len(cmd) > 0 && cmd[len(cmd)-1] == '\n' {
+		cmd = cmd[:len(cmd)-1]
+	}
+	// trim front and back space
+	cmd = bytes.TrimSpace(cmd)
+	// split bytes
 	params := bytes.Split(cmd, String2Bytes(" "))
-	result := make([][]byte, len(params))
-	copy(result, params)
+	result := make([][]byte, 0, len(params))
+	for _, param := range params {
+		if len(param) > 0 { // delete empty bytes
+			result = append(result, param)
+		}
+	}
 	return result
 }
 
@@ -67,6 +73,6 @@ func If2Kinds(condition bool, trueVal, falseVal any) any {
 
 func Assert(condition bool) {
 	if !condition {
-		logger.Fatal("assertion failed")
+		panic("assertion failed")
 	}
 }

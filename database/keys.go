@@ -35,6 +35,14 @@ func execDel(d *DB, args db.Params) resp.Reply {
 	return reply.NewIntReply(int64(n))
 }
 
+func undoDel(d *DB, args db.Params) []db.CmdLine {
+	keys := make([]string, 0, len(args))
+	for _, arg := range args {
+		keys = append(keys, utils.Bytes2String(arg))
+	}
+	return rollbackKeys(d, keys...)
+}
+
 // execExists returns the number of keys existing.
 func execExists(d *DB, args db.Params) resp.Reply {
 	n := int64(0)
@@ -114,6 +122,12 @@ func execRename(d *DB, args db.Params) resp.Reply {
 	return reply.NewOKReply()
 }
 
+func undoRename(d *DB, args db.Params) []db.CmdLine {
+	src := utils.Bytes2String(args[0])
+	dest := utils.Bytes2String(args[1])
+	return rollbackKeys(d, src, dest)
+}
+
 // execRenameNX 如果目标key不存在, 则把原始key改为目标key, 原始value不变
 //
 // 如果目标key存在, 返回0, 否则返回1
@@ -175,6 +189,13 @@ func execExpire(d *DB, args db.Params) resp.Reply {
 	d.append(utils.ToCmdLine2(enum.EXPIRE.String(), args...))
 
 	return reply.NewIntReply(1)
+}
+
+func undoExpire(d *DB, args db.Params) []db.CmdLine {
+	key := utils.Bytes2String(args[0])
+	return []db.CmdLine{
+		toTTLCmd(d, key).Args,
+	}
 }
 
 // execExpireAt 设置key的过期时间, 单位为s
@@ -375,20 +396,49 @@ func execKeys(d *DB, args db.Params) resp.Reply {
 	return reply.NewMultiBulkReply(result)
 }
 
+func execPersist(d *DB, args db.Params) resp.Reply {
+	key := utils.Bytes2String(args[0])
+	_, exist := d.getEntity(key)
+	if !exist {
+		return reply.NewIntReply(0)
+	}
+	_, isExist := d.ttl.Get(key)
+	if !isExist {
+		return reply.NewIntReply(0)
+	}
+
+	d.persist(key)
+	d.append(utils.ToCmdLine2(enum.PERSIST.String(), args...))
+
+	return reply.NewIntReply(1)
+}
+
+// toTTLCmd 判断数据是否有过期时间, 如果有则返回过期的命令
+func toTTLCmd(d *DB, key string) *reply.MultiBulkReply {
+	raw, exists := d.ttl.Get(key)
+	if !exists {
+		// has no TTL
+		return reply.NewMultiBulkReply(utils.ToCmdLine(enum.PERSIST.String(), key))
+	}
+	expireTime, _ := raw.(time.Time)
+	timestamp := strconv.FormatInt(expireTime.UnixMilli(), 10)
+	return reply.NewMultiBulkReply(utils.ToCmdLine(enum.PEXPIREAT.String(), key, timestamp))
+}
+
 func init() {
-	registerCommand(enum.DEL, writeAllKeys, execDel)
-	registerCommand(enum.EXISTS, readAllKeys, execExists)
-	registerCommand(enum.FLUSHDB, noPrepare, execFlushDB)
-	registerCommand(enum.TYPE, readFirstKey, execType)
-	registerCommand(enum.RENAME, prepareRename, execRename)
-	registerCommand(enum.RENAMENX, prepareRename, execRenameNX)
-	registerCommand(enum.KEYS, noPrepare, execKeys)
-	registerCommand(enum.EXPIRE, writeFirstKey, execExpire)
-	registerCommand(enum.EXPIRETIME, readFirstKey, execExpireTime)
-	registerCommand(enum.TTL, readFirstKey, execTTL)
-	registerCommand(enum.EXPIREAT, writeFirstKey, execExpireAt)
-	registerCommand(enum.PEXPIRE, writeFirstKey, execPExpire)
-	registerCommand(enum.PEXPIREAT, writeFirstKey, execPExpireAt)
-	registerCommand(enum.PEXPIRETIME, readFirstKey, execPExpireTime)
-	registerCommand(enum.PTTL, readFirstKey, execPTTL)
+	registerCommand(enum.DEL, writeAllKeys, execDel, undoDel)
+	registerCommand(enum.EXISTS, readAllKeys, execExists, nil)
+	registerCommand(enum.FLUSHDB, noPrepare, execFlushDB, nil)
+	registerCommand(enum.TYPE, readFirstKey, execType, nil)
+	registerCommand(enum.RENAME, prepareRename, execRename, undoRename)
+	registerCommand(enum.RENAMENX, prepareRename, execRenameNX, undoRename)
+	registerCommand(enum.KEYS, noPrepare, execKeys, nil)
+	registerCommand(enum.EXPIRE, writeFirstKey, execExpire, undoExpire)
+	registerCommand(enum.EXPIRETIME, readFirstKey, execExpireTime, nil)
+	registerCommand(enum.TTL, readFirstKey, execTTL, nil)
+	registerCommand(enum.EXPIREAT, writeFirstKey, execExpireAt, undoExpire)
+	registerCommand(enum.PEXPIRE, writeFirstKey, execPExpire, undoExpire)
+	registerCommand(enum.PEXPIREAT, writeFirstKey, execPExpireAt, undoExpire)
+	registerCommand(enum.PEXPIRETIME, readFirstKey, execPExpireTime, nil)
+	registerCommand(enum.PTTL, readFirstKey, execPTTL, nil)
 }

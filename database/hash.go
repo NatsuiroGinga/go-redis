@@ -333,16 +333,41 @@ func execHMGet(d *DB, args db.Params) resp.Reply {
 }
 
 func init() {
-	registerCommand(enum.HVALS, readFirstKey, execHVals)
-	registerCommand(enum.HSET, writeFirstKey, execHSet)
-	registerCommand(enum.HSETNX, writeFirstKey, execHSetNX)
-	registerCommand(enum.HVALS, readFirstKey, execHVals)
-	registerCommand(enum.HKEYS, readFirstKey, execHKeys)
-	registerCommand(enum.HGET, readFirstKey, execHGet)
-	registerCommand(enum.HEXISTS, readFirstKey, execHExists)
-	registerCommand(enum.HDEL, writeFirstKey, execHDel)
-	registerCommand(enum.HLEN, readFirstKey, execHLen)
-	registerCommand(enum.HGETALL, readFirstKey, execHGetAll)
-	registerCommand(enum.HMSET, writeFirstKey, execHMSet)
-	registerCommand(enum.HMGET, readFirstKey, execHMGet)
+	registerCommand(enum.HVALS, readFirstKey, execHVals, nil)
+	registerCommand(enum.HSET, writeFirstKey, execHSet, undoHSet)
+	registerCommand(enum.HSETNX, writeFirstKey, execHSetNX, undoHSet)
+	registerCommand(enum.HKEYS, readFirstKey, execHKeys, nil)
+	registerCommand(enum.HGET, readFirstKey, execHGet, nil)
+	registerCommand(enum.HEXISTS, readFirstKey, execHExists, nil)
+	registerCommand(enum.HDEL, writeFirstKey, execHDel, undoHDel)
+	registerCommand(enum.HLEN, readFirstKey, execHLen, nil)
+	registerCommand(enum.HGETALL, readFirstKey, execHGetAll, nil)
+	registerCommand(enum.HMSET, writeFirstKey, execHMSet, undoHMSet)
+	registerCommand(enum.HMGET, readFirstKey, execHMGet, nil)
+}
+
+func undoHMSet(d *DB, args db.Params) []db.CmdLine {
+	key := utils.Bytes2String(args[0])
+	size := (len(args) - 1) / 2
+	fields := make([]string, size)
+	for i := 0; i < size; i++ {
+		fields[i] = utils.Bytes2String(args[2*i+1])
+	}
+	return rollbackHashFields(d, key, fields...)
+}
+
+func undoHDel(d *DB, args db.Params) []db.CmdLine {
+	key := utils.Bytes2String(args[0])
+	params := args[1:]
+	fields := make([]string, 0, len(params))
+	for _, param := range params {
+		fields = append(fields, utils.Bytes2String(param))
+	}
+	return rollbackHashFields(d, key, fields...)
+}
+
+func undoHSet(d *DB, args db.Params) []db.CmdLine {
+	key := utils.Bytes2String(args[0])
+	field := utils.Bytes2String(args[1])
+	return rollbackHashFields(d, key, field)
 }

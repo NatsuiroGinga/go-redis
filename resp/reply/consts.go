@@ -111,3 +111,18 @@ func NewNoReply() resp.Reply {
 func (reply *noReply) Bytes() []byte {
 	return replies[reply]
 }
+
+type queuedReply struct{}
+
+func (reply *queuedReply) Bytes() []byte {
+	return queuedBytes
+}
+
+var queuedBytes = []byte("+QUEUED\r\n")
+
+// NewQueuedReply returns a QUEUED protocol
+func NewQueuedReply() resp.Reply {
+	return theQueuedReply
+}
+
+var theQueuedReply = new(queuedReply)

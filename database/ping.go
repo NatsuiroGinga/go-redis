@@ -12,5 +12,5 @@ func execPing(_ *DB, _ db.Params) resp.Reply {
 }
 
 func init() {
-	registerCommand(enum.PING, noPrepare, execPing)
+	registerCommand(enum.PING, noPrepare, execPing, nil)
 }

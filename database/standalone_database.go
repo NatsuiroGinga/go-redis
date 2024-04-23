@@ -67,7 +67,7 @@ func (database *StandaloneDatabase) Exec(client resp.Connection, args db.CmdLine
 
 	dbIndex := client.GetDBIndex()
 	d := database.dbSet[dbIndex]
-	return d.exec(args)
+	return d.Exec(client, args)
 }
 
 func (database *StandaloneDatabase) Close() error {

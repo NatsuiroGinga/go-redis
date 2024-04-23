@@ -1,9 +1,17 @@
 package enum
 
+import (
+	"go-redis/lib/utils"
+)
+
 // Command 命令枚举
 type Command struct {
 	name       string // 命令名称
 	paramCount int    // 除去命令本身后的参数数量
+}
+
+func (cmd *Command) Bytes() []byte {
+	return utils.String2Bytes(cmd.name)
 }
 
 // Name 返回命令名称
@@ -45,6 +53,7 @@ var (
 	PEXPIREAT   = &Command{name: "PEXPIREAT", paramCount: 2}
 	PEXPIRETIME = &Command{name: "PEXPIRETIME", paramCount: 1}
 	PTTL        = &Command{name: "PTTL", paramCount: 1}
+	PERSIST     = &Command{name: "PERSIST", paramCount: 2}
 )
 
 // string
@@ -129,9 +138,26 @@ var (
 	SUNIONSTORE = &Command{name: "SUNIONSTORE", paramCount: -2}
 )
 
+// transactions
+var (
+	TX_MULTI   = &Command{name: "MULTI", paramCount: 0}
+	TX_EXEC    = &Command{name: "EXEC", paramCount: 0}
+	TX_DISCARD = &Command{name: "DISCARD", paramCount: 0}
+	TX_WATCH   = &Command{name: "WATCH", paramCount: -1}
+)
+
+// Command flags
 const (
-	WITH_SCORES = "WITHSCORES"
-	LIMIT       = "LIMIT"
-	BEFORE      = "BEFORE"
-	AFTER       = "AFTER"
+	ZSET_WITH_SCORES = "WITHSCORES"
+	ZSET_LIMIT       = "LIMIT"
+	LIST_BEFORE      = "BEFORE"
+	LIST_AFTER       = "AFTER"
+)
+
+// Command types
+const (
+	MULTI   = "multi"
+	DISCARD = "discard"
+	EXEC    = "exec"
+	WATCH   = "watch"
 )
