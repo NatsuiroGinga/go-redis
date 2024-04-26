@@ -3,6 +3,7 @@ package database
 import (
 	"strconv"
 
+	"go-redis/config"
 	"go-redis/datastruct/set"
 	"go-redis/enum"
 	"go-redis/interface/db"
@@ -11,30 +12,45 @@ import (
 	"go-redis/resp/reply"
 )
 
-func (d *DB) getHashSet(key string) (*set.HashSet, resp.ErrorReply) {
+func (d *DB) getSet(key string) (set.Set, resp.ErrorReply) {
 	entity, exists := d.getEntity(key)
 	if !exists {
 		return nil, nil
 	}
-	hashSet, ok := entity.Data.(*set.HashSet)
+	st, ok := entity.Data.(set.Set)
 	if !ok {
 		return nil, reply.NewWrongTypeErrReply()
 	}
-	return hashSet, nil
+	return st, nil
 }
 
-func (d *DB) getOrCreateHashSet(key string) (hashSet *set.HashSet, create bool, errorReply resp.ErrorReply) {
-	hashSet, errorReply = d.getHashSet(key)
+func (d *DB) getOrCreateSet(key string, isIntSet bool) (st set.Set, create bool, errorReply resp.ErrorReply) {
+	st, errorReply = d.getSet(key)
 	if errorReply != nil {
 		return nil, false, errorReply
 	}
 	create = false
-	if hashSet == nil {
-		hashSet = set.NewHashSet()
-		d.putEntity(key, db.NewDataEntity(hashSet))
+	if st == nil {
+		if isIntSet {
+			st = set.NewIntSet()
+		} else {
+			st = set.NewHashSet()
+		}
+		d.putEntity(key, db.NewDataEntity(st))
 		create = true
 	}
-	return hashSet, create, nil
+	return st, create, nil
+}
+
+func (d *DB) createSet(key string, isIntSet bool) set.Set {
+	var st set.Set
+	if isIntSet {
+		st = set.NewIntSet()
+	} else {
+		st = set.NewHashSet()
+	}
+	d.putEntity(key, db.NewDataEntity(st))
+	return st
 }
 
 // execSAdd 命令将一个或多个成员元素加入到集合中，已经存在于集合的成员元素将被忽略。
@@ -50,31 +66,62 @@ func execSAdd(d *DB, args db.Params) resp.Reply {
 	key := utils.Bytes2String(args[0])
 	members := args[1:]
 
-	hashSet, _, errReply := d.getOrCreateHashSet(key)
-	if errReply != nil {
-		return errReply
+	// 1. 获取所有数字
+	isAllNums, nums := getNums(members...)
+	// 2. 获取set, 如果没有则初始化为intset
+	st, _, errorReply := d.getOrCreateSet(key, true)
+	if errorReply != nil {
+		return errorReply
 	}
+	// 3. 如果所有参数都是数字 且 set为intset, 进行新增
 	counter := 0
-	for _, member := range members {
-		counter += hashSet.Add(utils.Bytes2String(member))
+	if _, ok := st.(*set.IntSet); isAllNums && ok {
+		i := 0
+		changeSet := false
+		for _, num := range nums {
+			counter += st.Add(num)
+			i++
+			// 3.1 intset中的整数数量 等于 配置中的限制, 要转化为hashSet再做插入
+			if st.Len() == config.Properties.SetMaxIntSetEntries {
+				changeSet = true
+				break
+			}
+		}
+		if changeSet {
+			st = set.IntSet2HashSet(st.(*set.IntSet))
+			for ; i < len(members); i++ {
+				counter += st.Add(utils.Bytes2String(members[i]))
+			}
+			d.putEntity(key, db.NewDataEntity(st))
+		}
+	} else { // 4. 有参数不是数字 或者 set不是intset
+		if ok { // 是intset. 转化为hashSet
+			st = set.IntSet2HashSet(st.(*set.IntSet))
+			d.putEntity(key, db.NewDataEntity(st))
+		}
+		for _, member := range members {
+			counter += st.Add(utils.Bytes2String(member))
+		}
 	}
+
 	d.append(utils.ToCmdLine2(enum.SADD.String(), args...))
 	return reply.NewIntReply(int64(counter))
 }
 
-// getNums 从参数中获取数字类型, 并返回列表
+// getNums 从参数中获取数字类型, 并返回数字列表
 //
 // 如果参数全是数字, 返回true, 否则返回false
-func getNums(members [][]byte) (isAllNums bool, nums []int64) {
+func getNums(members ...[]byte) (isAllNums bool, nums []int64) {
 	nums = make([]int64, len(members))
+	isAllNums = true
 	for i, member := range members {
 		parseInt, err := strconv.ParseInt(utils.Bytes2String(member), 10, 64)
 		if err != nil {
-			return false, nil
+			isAllNums = false
 		}
 		nums[i] = parseInt
 	}
-	return true, nums
+	return
 }
 
 // execSIsMember 命令判断成员元素是否是集合的成员。
@@ -86,15 +133,24 @@ func execSIsMember(d *DB, args db.Params) resp.Reply {
 	key := utils.Bytes2String(args[0])
 	member := utils.Bytes2String(args[1])
 
-	hashSet, errReply := d.getHashSet(key)
+	st, errReply := d.getSet(key)
 	if errReply != nil {
 		return errReply
 	}
-	if hashSet == nil {
+	if st == nil {
 		return reply.NewIntReply(0)
 	}
 
-	return utils.If(hashSet.Contains(member), reply.NewIntReply(1), reply.NewIntReply(0))
+	_, ok := st.(*set.IntSet)
+	num, err := strconv.ParseInt(member, 10, 64)
+	if err != nil && ok { // 参数不是数字 且 set是intset
+		return reply.NewIntReply(0)
+	}
+	if err == nil && ok { // 参数是数字 且 set是intset
+		return utils.If(st.Contains(num), reply.NewIntReply(1), reply.NewIntReply(0))
+	}
+	// (参数是数字 且 set是hashSet) 或者 (参数不是数字 且 set是hashSet)
+	return utils.If(st.Contains(member), reply.NewIntReply(1), reply.NewIntReply(0))
 }
 
 // execSRem 命令用于移除集合中的一个或多个成员元素，不存在的成员元素会被忽略。
@@ -108,20 +164,33 @@ func execSRem(d *DB, args db.Params) resp.Reply {
 	key := utils.Bytes2String(args[0])
 	members := args[1:]
 
-	hashSet, errReply := d.getHashSet(key)
+	st, errReply := d.getSet(key)
 	if errReply != nil {
 		return errReply
 	}
-	if hashSet == nil {
+	if st == nil {
 		return reply.NewIntReply(0)
 	}
+
+	_, ok := st.(*set.IntSet)
+	_, nums := getNums(members...)
 	counter := 0
-	for _, member := range members {
-		counter += hashSet.Remove(utils.Bytes2String(member))
+
+	if ok { // intset
+		for _, num := range nums {
+			counter += st.Remove(num)
+		}
+	} else {
+		// hashSet
+		for _, member := range members {
+			counter += st.Remove(utils.Bytes2String(member))
+		}
 	}
-	if hashSet.Len() == 0 {
+
+	if st.Len() == 0 {
 		d.Remove(key)
 	}
+
 	if counter > 0 {
 		d.append(utils.ToCmdLine2(enum.SREM.String(), args...))
 	}
@@ -139,11 +208,11 @@ func execSPop(d *DB, args db.Params) resp.Reply {
 	}
 	key := utils.Bytes2String(args[0])
 
-	hashSet, errReply := d.getHashSet(key)
+	st, errReply := d.getSet(key)
 	if errReply != nil {
 		return errReply
 	}
-	if hashSet == nil {
+	if st == nil {
 		return reply.NewNullBulkReply()
 	}
 
@@ -155,15 +224,26 @@ func execSPop(d *DB, args db.Params) resp.Reply {
 			return reply.NewErrReply("value is out of range, must be positive")
 		}
 	}
-	if count > hashSet.Len() {
-		count = hashSet.Len()
+	if count > st.Len() {
+		count = st.Len()
 	}
 
-	members := hashSet.RandomDistinctMembers(count)
-	result := make([][]byte, len(members))
-	for i, v := range members {
-		hashSet.Remove(v)
-		result[i] = utils.String2Bytes(v)
+	members := st.RandomDistinctMembers(count)
+	var result [][]byte
+
+	if nums, ok := members.([]int64); ok {
+		result = make([][]byte, len(nums))
+		for i, v := range nums {
+			st.Remove(v)
+			result[i] = utils.String2Bytes(strconv.FormatInt(v, 10))
+		}
+	} else {
+		strs := members.([]string)
+		result = make([][]byte, len(strs))
+		for i, v := range strs {
+			st.Remove(v)
+			result[i] = utils.String2Bytes(v)
+		}
 	}
 
 	if count > 0 {
@@ -180,20 +260,25 @@ func execSPop(d *DB, args db.Params) resp.Reply {
 func execSCard(d *DB, args db.Params) resp.Reply {
 	key := utils.Bytes2String(args[0])
 
-	hashSet, errReply := d.getHashSet(key)
+	st, errReply := d.getSet(key)
 	if errReply != nil {
 		return errReply
 	}
-	if hashSet == nil {
+	if st == nil {
 		return reply.NewIntReply(0)
 	}
-	return reply.NewIntReply(int64(hashSet.Len()))
+	return reply.NewIntReply(int64(st.Len()))
 }
 
-func set2Reply(hashSet *set.HashSet) resp.Reply {
-	arr := make([][]byte, 0, hashSet.Len())
-	hashSet.ForEach(func(member string) bool {
-		arr = append(arr, utils.String2Bytes(member))
+func set2Reply(st set.Set) resp.Reply {
+	arr := make([][]byte, 0, st.Len())
+	st.ForEach(func(member any) bool {
+		switch member.(type) {
+		case int64:
+			arr = append(arr, utils.String2Bytes(strconv.FormatInt(member.(int64), 10)))
+		case string:
+			arr = append(arr, utils.String2Bytes(member.(string)))
+		}
 		return true
 	})
 	return reply.NewMultiBulkReply(arr)
@@ -221,7 +306,7 @@ func execSInter(d *DB, args db.Params) resp.Reply {
 // 返回存储交集的集合的元素数量
 func execSInterStore(d *DB, args db.Params) resp.Reply {
 	dest := utils.Bytes2String(args[0])
-	sets, errReply := getSets(d, args)
+	sets, errReply := getSets(d, args[1:])
 	if errReply != nil {
 		return reply.NewIntReply(0)
 	}
@@ -322,34 +407,29 @@ func execSRandMember(d *DB, args db.Params) resp.Reply {
 	}
 	key := utils.Bytes2String(args[0])
 
-	hashSet, errReply := d.getHashSet(key)
+	st, errReply := d.getSet(key)
 	if errReply != nil {
 		return errReply
 	}
-	if hashSet == nil {
+	if st == nil {
 		return reply.NewNullBulkReply()
 	}
 	if len(args) == 1 {
-		members := hashSet.RandomMembers(1)
-		return reply.NewBulkReply(utils.String2Bytes(members[0]))
+		members := st.RandomMembers(1)
+		result := members2Bytes(st, members)
+		return reply.NewBulkReply(result[0])
 	}
 	count, err := strconv.Atoi(utils.Bytes2String(args[1]))
 	if err != nil {
 		return reply.NewIntErrReply()
 	}
 	if count > 0 {
-		members := hashSet.RandomDistinctMembers(count)
-		result := make([][]byte, len(members))
-		for i, v := range members {
-			result[i] = []byte(v)
-		}
+		members := st.RandomDistinctMembers(count)
+		result := members2Bytes(st, members)
 		return reply.NewMultiBulkReply(result)
 	} else if count < 0 {
-		members := hashSet.RandomMembers(-count)
-		result := make([][]byte, len(members))
-		for i, v := range members {
-			result[i] = utils.String2Bytes(v)
-		}
+		members := st.RandomMembers(-count)
+		result := members2Bytes(st, members)
 		return reply.NewMultiBulkReply(result)
 	}
 	return reply.NewEmptyMultiBulkReply()
@@ -361,52 +441,79 @@ func execSRandMember(d *DB, args db.Params) resp.Reply {
 //
 // 返回集合中的所有成员。
 func execSMembers(d *DB, args db.Params) resp.Reply {
-	key := string(args[0])
+	key := utils.Bytes2String(args[0])
 
-	hashSet, errReply := d.getHashSet(key)
+	st, errReply := d.getSet(key)
 	if errReply != nil {
 		return errReply
 	}
-	if hashSet == nil {
+	if st == nil {
 		return reply.NewEmptyMultiBulkReply()
 	}
 
-	arr := make([][]byte, hashSet.Len())
-	i := 0
-	hashSet.ForEach(func(member string) bool {
-		arr[i] = utils.String2Bytes(member)
-		i++
-		return true
-	})
-	return reply.NewMultiBulkReply(arr)
+	members := st.ToSlice()
+	result := members2Bytes(st, members)
+
+	return reply.NewMultiBulkReply(result)
 }
 
 // getSets 获取参数中的所有key对应的set, 返回一个set切片
-func getSets(d *DB, args db.Params) ([]*set.HashSet, resp.ErrorReply) {
-	sets := make([]*set.HashSet, 0, len(args))
+func getSets(d *DB, args db.Params) ([]set.Set, resp.ErrorReply) {
+	sets := make([]set.Set, 0, len(args))
 	for _, arg := range args {
 		key := utils.Bytes2String(arg)
-		hashSet, errReply := d.getHashSet(key)
+		st, errReply := d.getSet(key)
 		if errReply != nil {
 			return nil, errReply
 		}
-		sets = append(sets, hashSet)
+		if st != nil {
+			sets = append(sets, st)
+		}
 	}
 	return sets, nil
 }
 
+func members2Bytes(st set.Set, members any) [][]byte {
+	arr := make([][]byte, 0, st.Len())
+
+	switch st.(type) {
+	case *set.IntSet:
+		vals := members.([]int64)
+		for _, v := range vals {
+			arr = append(arr, utils.String2Bytes(strconv.FormatInt(v, 10)))
+		}
+	case *set.HashSet:
+		vals := members.([]string)
+		for _, v := range vals {
+			arr = append(arr, utils.String2Bytes(v))
+		}
+	}
+
+	return arr
+}
+
+func undoSet(d *DB, args db.Params) []db.CmdLine {
+	key := utils.Bytes2String(args[0])
+	params := args[1:]
+	members := make([]string, 0, len(params))
+	for _, param := range params {
+		members = append(members, utils.Bytes2String(param))
+	}
+	return rollbackSetMembers(d, key, members...)
+}
+
 func init() {
-	registerCommand(enum.SADD, writeFirstKey, execSAdd)
-	registerCommand(enum.SCARD, readFirstKey, execSCard)
-	registerCommand(enum.SDIFF, readFirstKey, execSDiff)
-	registerCommand(enum.SDIFFSTORE, prepareSetCalculateStore, execSDiffStore)
-	registerCommand(enum.SINTER, prepareSetCalculate, execSInter)
-	registerCommand(enum.SINTERSTORE, prepareSetCalculateStore, execSInterStore)
-	registerCommand(enum.SISMEMBER, readFirstKey, execSIsMember)
-	registerCommand(enum.SMEMBERS, readFirstKey, execSMembers)
-	registerCommand(enum.SPOP, writeFirstKey, execSPop)
-	registerCommand(enum.SRANDMEMBER, readFirstKey, execSRandMember)
-	registerCommand(enum.SREM, writeFirstKey, execSRem)
-	registerCommand(enum.SUNION, prepareSetCalculate, execSUnion)
-	registerCommand(enum.SUNIONSTORE, prepareSetCalculateStore, execSUnionStore)
+	registerCommand(enum.SADD, writeFirstKey, execSAdd, undoSet)
+	registerCommand(enum.SCARD, readFirstKey, execSCard, nil)
+	registerCommand(enum.SDIFF, readFirstKey, execSDiff, nil)
+	registerCommand(enum.SDIFFSTORE, prepareSetCalculateStore, execSDiffStore, rollbackFirstKey)   //
+	registerCommand(enum.SINTER, prepareSetCalculate, execSInter, nil)                             //
+	registerCommand(enum.SINTERSTORE, prepareSetCalculateStore, execSInterStore, rollbackFirstKey) //
+	registerCommand(enum.SISMEMBER, readFirstKey, execSIsMember, nil)                              //
+	registerCommand(enum.SMEMBERS, readFirstKey, execSMembers, nil)                                //
+	registerCommand(enum.SPOP, writeFirstKey, execSPop, undoSet)                                   //
+	registerCommand(enum.SRANDMEMBER, readFirstKey, execSRandMember, nil)                          //
+	registerCommand(enum.SREM, writeFirstKey, execSRem, undoSet)                                   //
+	registerCommand(enum.SUNION, prepareSetCalculate, execSUnion, nil)                             //
+	registerCommand(enum.SUNIONSTORE, prepareSetCalculateStore, execSUnionStore, rollbackFirstKey) //
 }

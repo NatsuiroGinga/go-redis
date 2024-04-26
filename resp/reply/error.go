@@ -120,7 +120,7 @@ func (reply *standardErrReply) Bytes() []byte {
 }
 
 // NewErrReply 用于创建标准错误回复
-func NewErrReply(status string) resp.Reply {
+func NewErrReply(status string) resp.ErrorReply {
 	return &standardErrReply{status}
 }
 
@@ -128,8 +128,17 @@ func NewErrReplyByError(err error) resp.Reply {
 	return NewErrReply(err.Error())
 }
 
+// NormalErrReply 是自动添加 `-` 前缀和 `\r\n`后缀
 type NormalErrReply struct {
 	Status string
+}
+
+func (reply *NormalErrReply) Bytes() []byte {
+	return utils.String2Bytes(fmt.Sprintf("-%s\r\n", reply.Status))
+}
+
+func (reply *NormalErrReply) Error() string {
+	return reply.Status
 }
 
 /***************************************unknownCommandErrReply*******************************************/

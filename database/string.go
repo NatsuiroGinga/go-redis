@@ -149,7 +149,7 @@ func execDecr(d *DB, args db.Params) resp.Reply {
 	key := utils.Bytes2String(args[0])
 	entity, ok := d.getEntity(key)
 	if !ok {
-		d.putEntity(key, db.NewDataEntity(utils.String2Bytes("-1")))
+		d.putEntity(key, db.NewDataEntity([]byte("-1")))
 		d.append(utils.ToCmdLine2(enum.DECR.String(), args...))
 		return reply.NewIntReply(-1)
 	}
@@ -172,12 +172,39 @@ func execDecr(d *DB, args db.Params) resp.Reply {
 	return reply.NewIntReply(int64(num))
 }
 
+func execMSet(d *DB, args db.Params) resp.Reply {
+	if len(args)%2 != 0 {
+		return reply.NewSyntaxErrReply()
+	}
+
+	size := len(args) / 2
+	keys := make([]string, size)
+	values := make([][]byte, size)
+	for i := 0; i < size; i++ {
+		keys[i] = utils.Bytes2String(args[2*i])
+		values[i] = args[2*i+1]
+	}
+
+	for i, key := range keys {
+		value := values[i]
+		d.putEntity(key, db.NewDataEntity(value))
+	}
+	d.append(utils.ToCmdLine2("mset", args...))
+	return reply.NewOKReply()
+}
+
 func init() {
-	registerCommand(enum.GET, readFirstKey, execGet)
-	registerCommand(enum.SET, writeFirstKey, execSet)
-	registerCommand(enum.SETNX, writeFirstKey, execSetNX)
-	registerCommand(enum.GETSET, writeFirstKey, execGetSet)
-	registerCommand(enum.STRLEN, readFirstKey, execStrLen)
-	registerCommand(enum.INCR, writeFirstKey, execIncr)
-	registerCommand(enum.DECR, writeFirstKey, execDecr)
+	registerCommand(enum.GET, readFirstKey, execGet, nil)
+	registerCommand(enum.SET, writeFirstKey, execSet, rollbackFirstKey)
+	registerCommand(enum.MSET, prepareMSet, execMSet, undoMSet)
+	registerCommand(enum.SETNX, writeFirstKey, execSetNX, rollbackFirstKey)
+	registerCommand(enum.GETSET, writeFirstKey, execGetSet, rollbackFirstKey)
+	registerCommand(enum.STRLEN, readFirstKey, execStrLen, nil)
+	registerCommand(enum.INCR, writeFirstKey, execIncr, rollbackFirstKey)
+	registerCommand(enum.DECR, writeFirstKey, execDecr, rollbackFirstKey)
+}
+
+func undoMSet(d *DB, args db.Params) []db.CmdLine {
+	writeKeys, _ := prepareMSet(args)
+	return rollbackKeys(d, writeKeys...)
 }

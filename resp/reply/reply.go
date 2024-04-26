@@ -38,7 +38,7 @@ func (reply *MultiBulkReply) Bytes() []byte {
 		return utils.String2Bytes(enum.EMPTY_BULK_REPLY)
 	}
 	var buf bytes.Buffer
-	//Calculate the length of buffer
+	// Calculate the length of buffer
 	argLen := len(reply.Args)
 	bufLen := 1 + len(strconv.Itoa(argLen)) + 2
 	for _, arg := range reply.Args {
@@ -48,7 +48,7 @@ func (reply *MultiBulkReply) Bytes() []byte {
 			bufLen += 1 + len(strconv.Itoa(len(arg))) + 2 + len(arg) + 2
 		}
 	}
-	//Allocate memory
+	// Allocate memory
 	buf.Grow(bufLen)
 	buf.WriteString(fmt.Sprintf("*%d%s", argLen, enum.CRLF))
 
@@ -111,4 +111,27 @@ func NewIntReply(code int64) resp.Reply {
 func IsErrReply(reply resp.Reply) bool {
 	_, ok := reply.(resp.ErrorReply)
 	return ok
+}
+
+// MultiRawReply store complex list structure, for example GeoPos command
+type MultiRawReply struct {
+	Replies []resp.Reply
+}
+
+// NewMultiRawReply creates MultiRawReply
+func NewMultiRawReply(replies []resp.Reply) *MultiRawReply {
+	return &MultiRawReply{
+		Replies: replies,
+	}
+}
+
+// Bytes marshal redis.Reply
+func (r *MultiRawReply) Bytes() []byte {
+	argLen := len(r.Replies)
+	var buf bytes.Buffer
+	buf.WriteString("*" + strconv.Itoa(argLen) + enum.CRLF)
+	for _, arg := range r.Replies {
+		buf.Write(arg.Bytes())
+	}
+	return buf.Bytes()
 }

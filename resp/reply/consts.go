@@ -1,24 +1,13 @@
 package reply
 
 import (
-	"sync"
-
 	"go-redis/enum"
 	"go-redis/interface/resp"
 	"go-redis/lib/utils"
 )
 
 // 用于存储所有的回复, 使用懒加载的方式, 只有在需要的时候才会初始化且只会初始化一次
-var replies = map[resp.Reply][]byte{}
-
-// 用于保证只初始化一次
-var (
-	storePongReplyOnce           sync.Once
-	storeOKReplyOnce             sync.Once
-	storeNullBulkReplyOnce       sync.Once
-	storeEmptyMultiBulkReplyOnce sync.Once
-	storeNoReplyOnce             sync.Once
-)
+var replies map[resp.Reply][]byte
 
 // 优化: 使用单例模式, 保证只有一个实例, 且只有在需要的时候才会初始化
 var (
@@ -27,17 +16,32 @@ var (
 	theNullBulkReply       *NullBulkReply
 	theEmptyMultiBulkReply *emptyMultiBulkReply
 	theNoReply             *noReply
+	theQueuedReply         *queuedReply
 )
+
+func init() {
+	theNoReply = new(noReply)
+	theEmptyMultiBulkReply = new(emptyMultiBulkReply)
+	thePongReply = new(PongReply)
+	theOKReply = new(okReply)
+	theNullBulkReply = new(NullBulkReply)
+	theQueuedReply = new(queuedReply)
+
+	replies = map[resp.Reply][]byte{
+		theNoReply:             utils.String2Bytes(enum.NO_REPLY),
+		theEmptyMultiBulkReply: utils.String2Bytes(enum.EMPTY_BULK_REPLY),
+		thePongReply:           utils.String2Bytes(enum.PONG),
+		theOKReply:             utils.String2Bytes(enum.OK),
+		theNullBulkReply:       utils.String2Bytes(enum.NIL),
+		theQueuedReply:         queuedBytes,
+	}
+}
 
 // PongReply 用于表示PONG的回复
 type PongReply struct {
 }
 
 func NewPongReply() resp.Reply {
-	storePongReplyOnce.Do(func() {
-		thePongReply = new(PongReply)
-		replies[thePongReply] = utils.String2Bytes(enum.PONG)
-	})
 	return thePongReply
 }
 
@@ -51,10 +55,6 @@ type okReply struct {
 
 // NewOKReply 用于创建OK的回复
 func NewOKReply() resp.Reply {
-	storeOKReplyOnce.Do(func() {
-		theOKReply = new(okReply)
-		replies[theOKReply] = utils.String2Bytes(enum.OK)
-	})
 	return theOKReply
 }
 
@@ -68,10 +68,6 @@ type NullBulkReply struct {
 
 // NewNullBulkReply 用于创建空的回复字符串
 func NewNullBulkReply() resp.Reply {
-	storeNullBulkReplyOnce.Do(func() {
-		theNullBulkReply = new(NullBulkReply)
-		replies[theNullBulkReply] = utils.String2Bytes(enum.NIL)
-	})
 	return theNullBulkReply
 }
 
@@ -85,10 +81,6 @@ type emptyMultiBulkReply struct {
 
 // NewEmptyMultiBulkReply 用于创建空的多条批量回复数组
 func NewEmptyMultiBulkReply() resp.Reply {
-	storeEmptyMultiBulkReplyOnce.Do(func() {
-		theEmptyMultiBulkReply = new(emptyMultiBulkReply)
-		replies[theEmptyMultiBulkReply] = utils.String2Bytes(enum.EMPTY_BULK_REPLY)
-	})
 	return theEmptyMultiBulkReply
 }
 
@@ -101,13 +93,22 @@ type noReply struct {
 }
 
 func NewNoReply() resp.Reply {
-	storeNoReplyOnce.Do(func() {
-		theNoReply = new(noReply)
-		replies[theNoReply] = utils.String2Bytes(enum.NO_REPLY)
-	})
 	return theNoReply
 }
 
 func (reply *noReply) Bytes() []byte {
 	return replies[reply]
+}
+
+type queuedReply struct{}
+
+func (reply *queuedReply) Bytes() []byte {
+	return queuedBytes
+}
+
+var queuedBytes = []byte("+QUEUED\r\n")
+
+// NewQueuedReply returns a QUEUED protocol
+func NewQueuedReply() resp.Reply {
+	return theQueuedReply
 }

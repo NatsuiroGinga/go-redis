@@ -9,6 +9,7 @@ import (
 	"go-redis/enum"
 	"go-redis/interface/db"
 	"go-redis/interface/resp"
+	"go-redis/lib/asserts"
 	"go-redis/lib/utils"
 	"go-redis/resp/reply"
 )
@@ -63,7 +64,7 @@ func execLIndex(d *DB, args db.Params) resp.Reply {
 
 	// 3. 计算index
 	size := int64(l.Len())
-	utils.Assert(size > 0)
+	asserts.Assert(size > 0)
 	if index < -1*size {
 		return reply.NewNullBulkReply()
 	} else if index < 0 {
@@ -119,6 +120,20 @@ func execLPop(d *DB, args db.Params) resp.Reply {
 	return reply.NewBulkReply(val)
 }
 
+func undoLPop(d *DB, args db.Params) []db.CmdLine {
+	key := utils.Bytes2String(args[0])
+	l, errReply := d.getList(key)
+	if errReply != nil {
+		return nil
+	}
+	if l == nil || l.Len() == 0 {
+		return nil
+	}
+	element, _ := l.Get(0).([]byte)
+
+	return []db.CmdLine{utils.ToCmdLine2(enum.LPUSH.String(), args[0], element)}
+}
+
 // execLPush 将一个或多个值插入到列表头部。
 // 如果 key 不存在，一个空列表会被创建并执行 LPUSH 操作。 当 key 存在但不是列表类型时，返回一个错误。
 //
@@ -140,6 +155,16 @@ func execLPush(d *DB, args db.Params) resp.Reply {
 
 	d.append(utils.ToCmdLine2(enum.LPUSH.String(), args...))
 	return reply.NewIntReply(int64(l.Len()))
+}
+
+func undoLPush(_ *DB, args db.Params) []db.CmdLine {
+	key := utils.Bytes2String(args[0])
+	count := len(args) - 1
+	cmdLines := make([]db.CmdLine, 0, count)
+	for i := 0; i < count; i++ {
+		cmdLines = append(cmdLines, utils.ToCmdLine(enum.LPOP.String(), key))
+	}
+	return cmdLines
 }
 
 // execLPushX 将一个值插入到已存在的列表头部，列表不存在时操作无效。
@@ -220,11 +245,6 @@ func execLRange(d *DB, args db.Params) resp.Reply {
 // 返回: 被移除元素的数量。 列表不存在时返回 0 。
 func execLRem(d *DB, args db.Params) resp.Reply {
 	key := utils.Bytes2String(args[0])
-	count, err := strconv.Atoi(utils.Bytes2String(args[1]))
-	if err != nil {
-		return reply.NewIntErrReply()
-	}
-	value := args[2]
 
 	l, errReply := d.getList(key)
 	if errReply != nil {
@@ -233,6 +253,12 @@ func execLRem(d *DB, args db.Params) resp.Reply {
 	if l == nil {
 		return reply.NewIntReply(0)
 	}
+
+	count, err := strconv.Atoi(utils.Bytes2String(args[1]))
+	if err != nil {
+		return reply.NewIntErrReply()
+	}
+	value := args[2]
 
 	var removed int
 	if count == 0 { // 移除表中所有与 VALUE 相等的值。
@@ -285,7 +311,7 @@ func execLSet(d *DB, args db.Params) resp.Reply {
 	}
 
 	size := l.Len()
-	utils.Assert(size > 0)
+	asserts.Assert(size > 0)
 	if index < -1*size {
 		return reply.NewErrReplyByError(enum.INDEX_OUT_OF_RANGE)
 	} else if index < 0 {
@@ -297,6 +323,37 @@ func execLSet(d *DB, args db.Params) resp.Reply {
 	l.Set(index, value)
 	d.append(utils.ToCmdLine2(enum.LSET.String(), args...))
 	return reply.NewOKReply()
+}
+
+func undoLSet(d *DB, args db.Params) []db.CmdLine {
+	key := utils.Bytes2String(args[0])
+	index64, err := strconv.ParseInt(utils.Bytes2String(args[1]), 10, 64)
+	if err != nil {
+		return nil
+	}
+	index := int(index64)
+	l, errReply := d.getList(key)
+	if errReply != nil {
+		return nil
+	}
+	if l == nil {
+		return nil
+	}
+
+	size := l.Len()
+	asserts.Assert(size > 0)
+
+	if index < -1*size {
+		return nil
+	} else if index < 0 {
+		index = size + index
+	} else if index >= size {
+		return nil
+	}
+
+	value, _ := l.Get(index).([]byte)
+
+	return []db.CmdLine{utils.ToCmdLine2(enum.LSET.String(), args[0], args[1], value)}
 }
 
 // execRPop  命令用于移除列表的最后一个元素，返回值为移除的元素。
@@ -321,6 +378,20 @@ func execRPop(d *DB, args db.Params) resp.Reply {
 	}
 	d.append(utils.ToCmdLine2(enum.RPOP.String(), args...))
 	return reply.NewBulkReply(val)
+}
+
+func undoRPop(d *DB, args db.Params) []db.CmdLine {
+	key := utils.Bytes2String(args[0])
+	l, errReply := d.getList(key)
+	if errReply != nil {
+		return nil
+	}
+	if l == nil || l.Len() == 0 {
+		return nil
+	}
+	element := l.Get(l.Len() - 1).([]byte)
+
+	return []db.CmdLine{utils.ToCmdLine2(enum.LPUSH.String(), args[0], element)}
 }
 
 func prepareRPopLPush(args db.Params) (writeKeys []string, readKeys []string) {
@@ -363,6 +434,29 @@ func execRPopLPush(d *DB, args db.Params) resp.Reply {
 	return reply.NewBulkReply(val)
 }
 
+func undoRPopLPush(d *DB, args db.Params) []db.CmdLine {
+	sourceKey := utils.Bytes2String(args[0])
+	l, errReply := d.getList(sourceKey)
+	if errReply != nil {
+		return nil
+	}
+	if l == nil || l.Len() == 0 {
+		return nil
+	}
+	element, _ := l.Get(l.Len() - 1).([]byte)
+	return []db.CmdLine{
+		{
+			enum.RPUSH.Bytes(),
+			args[0],
+			element,
+		},
+		{
+			enum.LPOP.Bytes(),
+			args[1],
+		},
+	}
+}
+
 // execRPush 命令用于将一个或多个值插入到列表的尾部(最右边)。
 //
 // # RPUSH KEY_NAME VALUE1..VALUEN
@@ -382,6 +476,16 @@ func execRPush(d *DB, args db.Params) resp.Reply {
 	}
 	d.append(utils.ToCmdLine2(enum.RPUSH.String(), args...))
 	return reply.NewIntReply(int64(l.Len()))
+}
+
+func undoRPush(_ *DB, args db.Params) []db.CmdLine {
+	key := utils.Bytes2String(args[0])
+	count := len(args) - 1
+	cmdLines := make([]db.CmdLine, 0, count)
+	for i := 0; i < count; i++ {
+		cmdLines = append(cmdLines, utils.ToCmdLine(enum.RPOP.String(), key))
+	}
+	return cmdLines
 }
 
 // execRPushX 命令用于将一个值插入到已存在的列表尾部(最右边)。如果列表不存在，操作无效。
@@ -474,14 +578,14 @@ func execLInsert(d *DB, args db.Params) resp.Reply {
 	}
 
 	dir := strings.ToUpper(utils.Bytes2String(args[1]))
-	if dir != enum.BEFORE && dir != enum.AFTER {
+	if dir != enum.LIST_BEFORE && dir != enum.LIST_AFTER {
 		return reply.NewSyntaxErrReply()
 	}
 
 	pivot := args[2]
 	index := -1
 	l.ForEach(func(i int, v any) bool {
-		if bytes.EqualFold(pivot, v.([]byte)) {
+		if bytes.Equal(pivot, v.([]byte)) {
 			index = i
 			return false
 		}
@@ -492,7 +596,7 @@ func execLInsert(d *DB, args db.Params) resp.Reply {
 	}
 
 	val := args[3]
-	if dir == enum.BEFORE {
+	if dir == enum.LIST_BEFORE {
 		l.Insert(index, val)
 	} else {
 		l.Insert(index+1, val)
@@ -504,18 +608,18 @@ func execLInsert(d *DB, args db.Params) resp.Reply {
 }
 
 func init() {
-	registerCommand(enum.LINDEX, readFirstKey, execLIndex)
-	registerCommand(enum.LLEN, readFirstKey, execLLen)
-	registerCommand(enum.LPOP, writeFirstKey, execLPop)
-	registerCommand(enum.LPUSH, writeFirstKey, execLPush)
-	registerCommand(enum.LPUSHX, writeFirstKey, execLPushX)
-	registerCommand(enum.LRANGE, readFirstKey, execLRange)
-	registerCommand(enum.LREM, writeFirstKey, execLRem)
-	registerCommand(enum.LSET, writeFirstKey, execLSet)
-	registerCommand(enum.RPOP, writeFirstKey, execRPop)
-	registerCommand(enum.RPOPLPUSH, prepareRPopLPush, execRPopLPush)
-	registerCommand(enum.RPUSH, writeFirstKey, execRPush)
-	registerCommand(enum.RPUSHX, writeFirstKey, execRPushX)
-	registerCommand(enum.LTRIM, writeFirstKey, execLTrim)
-	registerCommand(enum.LINSERT, writeFirstKey, execLInsert)
+	registerCommand(enum.LINDEX, readFirstKey, execLIndex, nil)                     //
+	registerCommand(enum.LLEN, readFirstKey, execLLen, nil)                         //
+	registerCommand(enum.LPOP, writeFirstKey, execLPop, undoLPop)                   //
+	registerCommand(enum.LPUSH, writeFirstKey, execLPush, undoLPush)                //
+	registerCommand(enum.LPUSHX, writeFirstKey, execLPushX, undoLPush)              //
+	registerCommand(enum.LRANGE, readFirstKey, execLRange, nil)                     //
+	registerCommand(enum.LREM, writeFirstKey, execLRem, rollbackFirstKey)           //
+	registerCommand(enum.LSET, writeFirstKey, execLSet, undoLSet)                   //
+	registerCommand(enum.RPOP, writeFirstKey, execRPop, undoRPop)                   //
+	registerCommand(enum.RPOPLPUSH, prepareRPopLPush, execRPopLPush, undoRPopLPush) //
+	registerCommand(enum.RPUSH, writeFirstKey, execRPush, undoRPush)                //
+	registerCommand(enum.RPUSHX, writeFirstKey, execRPushX, undoRPush)              //
+	registerCommand(enum.LTRIM, writeFirstKey, execLTrim, rollbackFirstKey)         //
+	registerCommand(enum.LINSERT, writeFirstKey, execLInsert, rollbackFirstKey)
 }

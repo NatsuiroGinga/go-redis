@@ -6,13 +6,14 @@ import (
 
 	"go-redis/interface/db"
 	"go-redis/interface/resp"
+	"go-redis/lib/asserts"
 	"go-redis/lib/utils"
 	"go-redis/resp/reply"
 )
 
 // computeInterval 根据start和stop计算合法区间, 左闭右闭
 func computeInterval[T utils.Signed](size T, start, stop *T) error {
-	utils.Assert(size > 0)
+	asserts.Assert(size > 0)
 	// 1. 计算start
 	// 1.1 start < -size, 从0开始
 	if *start < -1*size {

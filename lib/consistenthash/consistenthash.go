@@ -1,8 +1,9 @@
 package consistenthash
 
 import (
-	"go-redis/lib/utils"
 	"hash/crc32"
+
+	"go-redis/lib/utils"
 )
 
 // HashFunc is the type of hash function to use to map keys to

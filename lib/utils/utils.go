@@ -2,8 +2,9 @@ package utils
 
 import (
 	"bytes"
+	"strings"
 
-	"go-redis/lib/logger"
+	"go-redis/interface/db"
 )
 
 // ToCmdLine convert strings to [][]byte
@@ -19,16 +20,24 @@ func ToCmdLine(cmd ...string) [][]byte {
 func ToCmdLine2(commandName string, args ...[]byte) [][]byte {
 	result := make([][]byte, len(args)+1)
 	result[0] = String2Bytes(commandName)
-	for i, s := range args {
-		result[i+1] = s
-	}
+	copy(result[1:], args)
 	return result
 }
 
 func ToCmdLine3(cmd []byte) [][]byte {
+	if len(cmd) > 0 && cmd[len(cmd)-1] == '\n' {
+		cmd = cmd[:len(cmd)-1]
+	}
+	// trim front and back space
+	cmd = bytes.TrimSpace(cmd)
+	// split bytes
 	params := bytes.Split(cmd, String2Bytes(" "))
-	result := make([][]byte, len(params))
-	copy(result, params)
+	result := make([][]byte, 0, len(params))
+	for _, param := range params {
+		if len(param) > 0 { // delete empty bytes
+			result = append(result, param)
+		}
+	}
 	return result
 }
 
@@ -65,8 +74,24 @@ func If2Kinds(condition bool, trueVal, falseVal any) any {
 	return falseVal
 }
 
-func Assert(condition bool) {
-	if !condition {
-		logger.Fatal("assertion failed")
+func CmdLine2String(cmdLine db.CmdLine) string {
+	var builder strings.Builder
+	flag := false
+	for _, cmdBytes := range cmdLine {
+		if !flag {
+			flag = true
+		} else {
+			builder.WriteString(" ")
+		}
+		builder.Write(cmdBytes)
 	}
+	return builder.String()
+}
+
+func CmdLine2Strings(cmdLine db.CmdLine) []string {
+	strs := make([]string, 0, len(cmdLine))
+	for _, line := range cmdLine {
+		strs = append(strs, Bytes2String(line))
+	}
+	return strs
 }

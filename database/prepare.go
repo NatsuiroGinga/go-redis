@@ -38,7 +38,7 @@ func prepareRename(args db.Params) (writeKeys, readKeys []string) {
 }
 
 // prepareSetCalculateStore 是SDIFFSTORE, SINTERSTORE, SUNIONSTORE的准备函数
-func prepareSetCalculateStore(args db.Params) (writeKeys []string, readKeys []string) {
+func prepareSetCalculateStore(args db.Params) (writeKeys, readKeys []string) {
 	dest := utils.Bytes2String(args[0])
 	keys := make([]string, len(args)-1)
 	for i, arg := range args[1:] {
@@ -54,4 +54,13 @@ func prepareSetCalculate(args db.Params) (writeKeys []string, readKeys []string)
 		keys[i] = string(arg)
 	}
 	return nil, keys
+}
+
+func prepareMSet(args [][]byte) (writeKeys []string, readKeys []string) {
+	size := len(args) / 2
+	keys := make([]string, size)
+	for i := 0; i < size; i++ {
+		keys[i] = string(args[2*i])
+	}
+	return keys, nil
 }

@@ -8,26 +8,23 @@ import (
 	"go-redis/resp/reply"
 )
 
-// cmdFunc is the function type for commands
-type cmdFunc func(clusterDatabase *ClusterDatabase, connection resp.Connection, args db.CmdLine) resp.Reply
+// execFunc is the function to execute command
+type execFunc func(cluster *ClusterDatabase, connection resp.Connection, args db.CmdLine) resp.Reply
 
 // newRouter returns a router map for commands
-func newRouter() (routerMap map[string]cmdFunc) {
-	return map[string]cmdFunc{
-		enum.EXISTS.String():   defaultFunc,
-		enum.TYPE.String():     defaultFunc,
-		enum.GET.String():      defaultFunc,
-		enum.KEYS.String():     defaultFunc,
-		enum.SET.String():      defaultFunc,
-		enum.GETSET.String():   defaultFunc,
-		enum.SETNX.String():    defaultFunc,
-		enum.PING.String():     ping,
-		enum.RENAME.String():   rename,
-		enum.RENAMENX.String(): renamenx,
-		enum.FLUSHDB.String():  flushdb,
-		enum.DEL.String():      del,
-		enum.SELECT.String():   execSelect,
+func newRouter() (routerMap map[string]execFunc) {
+	cmdMap := map[string]execFunc{
+		// enum.RENAMENX.String():     execRenameNx,
+		enum.TCC_PREPARE.String():  execPrepare,
+		enum.TCC_COMMIT.String():   execCommit,
+		enum.TCC_ROLLBACK.String(): execRollback,
 	}
+
+	return cmdMap
+}
+
+func registerRouter(command *enum.Command, execF execFunc) {
+	router[command.String()] = execF
 }
 
 // defaultFunc is the default function for commands, it will relay the command to the peer
@@ -36,7 +33,7 @@ func newRouter() (routerMap map[string]cmdFunc) {
 //
 //	> SET key value
 //	< OK
-var defaultFunc = cmdFunc(func(clusterDatabase *ClusterDatabase, connection resp.Connection, args db.CmdLine) resp.Reply {
+func defaultFunc(clusterDatabase *ClusterDatabase, connection resp.Connection, args db.CmdLine) resp.Reply {
 	if len(args) == 0 {
 		return reply.NewUnknownErrReply()
 	}
@@ -46,5 +43,89 @@ var defaultFunc = cmdFunc(func(clusterDatabase *ClusterDatabase, connection resp
 	key := utils.Bytes2String(args[1])
 	peer := clusterDatabase.peerPicker.Pick(key)
 
-	return clusterDatabase.relay(peer, connection, args)
-})
+	r := clusterDatabase.relay(peer, connection, args)
+	return r
+}
+
+func init() {
+	for _, cmd := range defaultCmds {
+		router[cmd] = defaultFunc
+	}
+}
+
+var defaultCmds = []string{
+	enum.EXPIRE.String(),
+	enum.EXPIREAT.String(),
+	enum.PEXPIRE.String(),
+	enum.PEXPIREAT.String(),
+	enum.TTL.String(),
+	enum.PTTL.String(),
+	enum.PERSIST.String(),
+	enum.TYPE.String(),
+	enum.SET.String(),
+	enum.SETNX.String(),
+	"setEx",
+	"pSetEx",
+	enum.GET.String(),
+	"getEx",
+	"getSet",
+	"getDel",
+	enum.INCR.String(),
+	"incrBy",
+	"incrByFloat",
+	enum.DECR.String(),
+	"decrBy",
+	enum.LPUSH.String(),
+	enum.LPUSHX.String(),
+	enum.RPUSH.String(),
+	enum.RPUSHX.String(),
+	enum.LPOP.String(),
+	enum.RPOP.String(),
+	enum.LREM.String(),
+	enum.LLEN.String(),
+	enum.LINDEX.String(),
+	enum.LSET.String(),
+	enum.LRANGE.String(),
+	enum.HSET.String(),
+	enum.HSETNX.String(),
+	enum.HGET.String(),
+	enum.HEXISTS.String(),
+	enum.HDEL.String(),
+	enum.HLEN.String(),
+	"HStrLen",
+	enum.HMGET.String(),
+	enum.HMSET.String(),
+	enum.HKEYS.String(),
+	enum.HVALS.String(),
+	enum.HGETALL.String(),
+	"HIncrBy",
+	"HIncrByFloat",
+	"HRandField",
+	enum.SADD.String(),
+	enum.SISMEMBER.String(),
+	enum.SREM.String(),
+	enum.SPOP.String(),
+	enum.SCARD.String(),
+	enum.SMEMBERS.String(),
+	// enum.SINTER.String(),
+	// enum.SINTERSTORE.String(),
+	// enum.SUNION.String(),
+	// enum.SUNIONSTORE.String(),
+	// enum.SDIFF.String(),
+	// enum.SDIFFSTORE.String(),
+	enum.SRANDMEMBER.String(),
+	enum.ZADD.String(),
+	enum.ZSCORE.String(),
+	enum.ZINCRBY.String(),
+	enum.ZRANK.String(),
+	enum.ZCOUNT.String(),
+	enum.ZREVRANK.String(),
+	enum.ZCARD.String(),
+	enum.ZRANGE.String(),
+	enum.ZREVRANGE.String(),
+	enum.ZRANGEBYSCORE.String(),
+	enum.ZREVRANGEBYSCORE.String(),
+	enum.ZREM.String(),
+	enum.ZREMRANGEBYSCORE.String(),
+	enum.ZREMRANGEBYRANK.String(),
+}

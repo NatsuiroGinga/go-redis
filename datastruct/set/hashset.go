@@ -20,22 +20,34 @@ func NewHashSet(members ...string) *HashSet {
 // Add 向集合中添加一个val
 //
 // 成功添加返回1, 否则返回0
-func (set *HashSet) Add(val string) int {
-	return set.hashTable.Set(val, nil)
+func (set *HashSet) Add(val any) int {
+	key, ok := val.(string)
+	if !ok {
+		return 0
+	}
+	return set.hashTable.Set(key, nil)
 }
 
 // Remove 从集合中删除一个val
 //
 // 删除成功返回1, 否则返回0
-func (set *HashSet) Remove(val string) int {
-	return set.hashTable.Remove(val)
+func (set *HashSet) Remove(val any) int {
+	key, ok := val.(string)
+	if !ok {
+		return 0
+	}
+	return set.hashTable.Remove(key)
 }
 
 // Contains 判断集合中是否包含val
 //
 // 包含返回true, 否则返回false
-func (set *HashSet) Contains(val string) bool {
-	_, exist := set.hashTable.Get(val)
+func (set *HashSet) Contains(val any) bool {
+	key, ok := val.(string)
+	if !ok {
+		return false
+	}
+	_, exist := set.hashTable.Get(key)
 	return exist
 }
 
@@ -45,9 +57,9 @@ func (set *HashSet) Len() int {
 }
 
 // ToSlice 把集合转化为切片
-func (set *HashSet) ToSlice() []string {
+func (set *HashSet) ToSlice() any {
 	slice := make([]string, 0, set.Len())
-	set.hashTable.ForEach(func(key string, val any) bool {
+	set.hashTable.ForEach(func(key string, _ any) bool {
 		slice = append(slice, key)
 		return true
 	})
@@ -55,16 +67,16 @@ func (set *HashSet) ToSlice() []string {
 }
 
 // ForEach 遍历集合中的元素
-func (set *HashSet) ForEach(consumer func(member string) bool) {
-	set.hashTable.ForEach(func(key string, val any) bool {
+func (set *HashSet) ForEach(consumer func(member any) bool) {
+	set.hashTable.ForEach(func(key string, _ any) bool {
 		return consumer(key)
 	})
 }
 
-// clone 对集合进行浅拷贝
-func (set *HashSet) clone() *HashSet {
+// Clone 对集合进行浅拷贝
+func (set *HashSet) Clone() Set {
 	result := NewHashSet()
-	set.ForEach(func(member string) bool {
+	set.ForEach(func(member any) bool {
 		result.Add(member)
 		return true
 	})
@@ -72,60 +84,11 @@ func (set *HashSet) clone() *HashSet {
 }
 
 // RandomMembers 返回字典中n个随机的 key
-func (set *HashSet) RandomMembers(n int) []string {
+func (set *HashSet) RandomMembers(n int) any {
 	return set.hashTable.RandomKeys(n)
 }
 
 // RandomDistinctMembers 返回字典中n个随机且不重复的key
-func (set *HashSet) RandomDistinctMembers(n int) []string {
+func (set *HashSet) RandomDistinctMembers(n int) any {
 	return set.hashTable.RandomDistinctKeys(n)
-}
-
-// Intersect 对多个集合求交集
-func Intersect(sets ...*HashSet) *HashSet {
-	result := NewHashSet()
-	if len(sets) == 0 {
-		return result
-	}
-
-	countMap := make(map[string]int)
-	for _, set := range sets {
-		set.ForEach(func(member string) bool {
-			countMap[member]++
-			return true
-		})
-	}
-	for k, v := range countMap {
-		if v == len(sets) {
-			result.Add(k)
-		}
-	}
-	return result
-}
-
-// Union 对多个集合求交集
-func Union(sets ...*HashSet) *HashSet {
-	result := NewHashSet()
-	for _, set := range sets {
-		set.ForEach(func(member string) bool {
-			result.Add(member)
-			return true
-		})
-	}
-	return result
-}
-
-// Diff 求多个集合中不同的元素
-func Diff(sets ...*HashSet) *HashSet {
-	if len(sets) == 0 {
-		return NewHashSet()
-	}
-	result := sets[0].clone()
-	for i := 1; i < len(sets) && result.Len() != 0; i++ {
-		sets[i].ForEach(func(member string) bool {
-			result.Remove(member)
-			return true
-		})
-	}
-	return result
 }

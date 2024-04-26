@@ -4,6 +4,7 @@ import (
 	"strconv"
 	"time"
 
+	"go-redis/aof"
 	"go-redis/datastruct/dict"
 	"go-redis/datastruct/list"
 	"go-redis/datastruct/set"
@@ -13,6 +14,7 @@ import (
 	"go-redis/interface/resp"
 	"go-redis/lib/utils"
 	"go-redis/lib/wildcard"
+	"go-redis/resp/parser"
 	"go-redis/resp/reply"
 )
 
@@ -33,6 +35,14 @@ func execDel(d *DB, args db.Params) resp.Reply {
 	}
 
 	return reply.NewIntReply(int64(n))
+}
+
+func undoDel(d *DB, args db.Params) []db.CmdLine {
+	keys := make([]string, 0, len(args))
+	for _, arg := range args {
+		keys = append(keys, utils.Bytes2String(arg))
+	}
+	return rollbackKeys(d, keys...)
 }
 
 // execExists returns the number of keys existing.
@@ -65,7 +75,7 @@ func execType(d *DB, args db.Params) resp.Reply {
 	key := utils.Bytes2String(args[0])
 	entity, ok := d.getEntity(key)
 	if !ok {
-		return reply.NewErrReply("none")
+		return reply.NewStatusReply("none")
 	}
 
 	switch entity.Data.(type) {
@@ -112,6 +122,12 @@ func execRename(d *DB, args db.Params) resp.Reply {
 	d.append(utils.ToCmdLine2(enum.RENAME.String(), args...))
 
 	return reply.NewOKReply()
+}
+
+func undoRename(d *DB, args db.Params) []db.CmdLine {
+	src := utils.Bytes2String(args[0])
+	dest := utils.Bytes2String(args[1])
+	return rollbackKeys(d, src, dest)
 }
 
 // execRenameNX 如果目标key不存在, 则把原始key改为目标key, 原始value不变
@@ -175,6 +191,13 @@ func execExpire(d *DB, args db.Params) resp.Reply {
 	d.append(utils.ToCmdLine2(enum.EXPIRE.String(), args...))
 
 	return reply.NewIntReply(1)
+}
+
+func undoExpire(d *DB, args db.Params) []db.CmdLine {
+	key := utils.Bytes2String(args[0])
+	return []db.CmdLine{
+		toTTLCmd(d, key).Args,
+	}
 }
 
 // execExpireAt 设置key的过期时间, 单位为s
@@ -360,7 +383,7 @@ func execPTTL(d *DB, args db.Params) resp.Reply {
 // 例如: 现有a, ab, abc, z四个key, 使用keys a*命令会返回a, ab, abc, 因为以上三个命令符合a*这个模板
 func execKeys(d *DB, args db.Params) resp.Reply {
 	// 1. 取出key, pattern
-	key := string(args[0])
+	key := utils.Bytes2String(args[0])
 	pattern := wildcard.CompilePattern(key)
 	result := make([][]byte, 0)
 	// 2. 从数据字典中查询符合pattern且没过期的key
@@ -375,20 +398,110 @@ func execKeys(d *DB, args db.Params) resp.Reply {
 	return reply.NewMultiBulkReply(result)
 }
 
+func execPersist(d *DB, args db.Params) resp.Reply {
+	key := utils.Bytes2String(args[0])
+	_, exist := d.getEntity(key)
+	if !exist {
+		return reply.NewIntReply(0)
+	}
+	_, isExist := d.ttl.Get(key)
+	if !isExist {
+		return reply.NewIntReply(0)
+	}
+
+	d.persist(key)
+	d.append(utils.ToCmdLine2(enum.PERSIST.String(), args...))
+
+	return reply.NewIntReply(1)
+}
+
+// toTTLCmd 判断数据是否有过期时间, 如果有则返回过期的命令
+func toTTLCmd(d *DB, key string) *reply.MultiBulkReply {
+	raw, exists := d.ttl.Get(key)
+	if !exists {
+		// has no TTL
+		return reply.NewMultiBulkReply(utils.ToCmdLine(enum.PERSIST.String(), key))
+	}
+	expireTime, _ := raw.(time.Time)
+	timestamp := strconv.FormatInt(expireTime.UnixMilli(), 10)
+	return reply.NewMultiBulkReply(utils.ToCmdLine(enum.PEXPIREAT.String(), key, timestamp))
+}
+
+// execDumpKey returns redis serialization protocol data of given key (see aof.EntityToCmd)
+func execDumpKey(d *DB, args db.CmdLine) resp.Reply {
+	key := utils.Bytes2String(args[0])
+	entity, ok := d.getEntity(key)
+	if !ok {
+		return reply.NewEmptyMultiBulkReply()
+	}
+	dumpCmd := aof.Entity2Cmd(key, entity)
+	ttlCmd := toTTLCmd(d, key)
+	return reply.NewMultiBulkReply([][]byte{
+		dumpCmd.Bytes(),
+		ttlCmd.Bytes(),
+	})
+}
+
+// execRenameFrom 删除旧的key
+func execRenameFrom(d *DB, args [][]byte) resp.Reply {
+	key := utils.Bytes2String(args[0])
+	d.Remove(key)
+	return reply.NewOKReply()
+}
+
+// execRenameTo 把旧key对应的值存储到新key中, 必须使用事务保证一致性
+// # RENAMETO key dumpCmd ttlCmd
+func execRenameTo(d *DB, args db.CmdLine) resp.Reply {
+	key := args[0]
+	dumpRawCmd, err := parser.ParseOne(args[1])
+	if err != nil {
+		return reply.NewErrReply("illegal dump cmd: " + err.Error())
+	}
+	dumpCmd, ok := dumpRawCmd.(*reply.MultiBulkReply)
+	if !ok {
+		return reply.NewErrReply("dump cmd is not multi bulk reply")
+	}
+	dumpCmd.Args[1] = key // change key
+	ttlRawCmd, err := parser.ParseOne(args[2])
+	if err != nil {
+		return reply.NewErrReply("illegal ttl cmd: " + err.Error())
+	}
+	ttlCmd, ok := ttlRawCmd.(*reply.MultiBulkReply)
+	if !ok {
+		return reply.NewErrReply("ttl cmd is not multi bulk reply")
+	}
+	ttlCmd.Args[1] = key
+	d.Remove(string(key))
+	// 在cluster层已经给数据上锁了
+	dumpResult := d.exec(dumpCmd.Args)
+	if reply.IsErrReply(dumpResult) {
+		return dumpResult
+	}
+	ttlResult := d.exec(ttlCmd.Args)
+	if reply.IsErrReply(ttlResult) {
+		return ttlResult
+	}
+	return reply.NewOKReply()
+}
+
 func init() {
-	registerCommand(enum.DEL, writeAllKeys, execDel)
-	registerCommand(enum.EXISTS, readAllKeys, execExists)
-	registerCommand(enum.FLUSHDB, noPrepare, execFlushDB)
-	registerCommand(enum.TYPE, readFirstKey, execType)
-	registerCommand(enum.RENAME, prepareRename, execRename)
-	registerCommand(enum.RENAMENX, prepareRename, execRenameNX)
-	registerCommand(enum.KEYS, noPrepare, execKeys)
-	registerCommand(enum.EXPIRE, writeFirstKey, execExpire)
-	registerCommand(enum.EXPIRETIME, readFirstKey, execExpireTime)
-	registerCommand(enum.TTL, readFirstKey, execTTL)
-	registerCommand(enum.EXPIREAT, writeFirstKey, execExpireAt)
-	registerCommand(enum.PEXPIRE, writeFirstKey, execPExpire)
-	registerCommand(enum.PEXPIREAT, writeFirstKey, execPExpireAt)
-	registerCommand(enum.PEXPIRETIME, readFirstKey, execPExpireTime)
-	registerCommand(enum.PTTL, readFirstKey, execPTTL)
+	registerCommand(enum.DEL, writeAllKeys, execDel, undoDel)
+	registerCommand(enum.EXISTS, readAllKeys, execExists, nil)
+	registerCommand(enum.FLUSHDB, noPrepare, execFlushDB, nil)
+	registerCommand(enum.TYPE, readFirstKey, execType, nil)
+	registerCommand(enum.RENAME, prepareRename, execRename, undoRename)
+	registerCommand(enum.RENAMENX, prepareRename, execRenameNX, undoRename)
+	registerCommand(enum.KEYS, noPrepare, execKeys, nil)
+	registerCommand(enum.EXPIRE, writeFirstKey, execExpire, undoExpire)
+	registerCommand(enum.EXPIRETIME, readFirstKey, execExpireTime, nil)
+	registerCommand(enum.TTL, readFirstKey, execTTL, nil)
+	registerCommand(enum.EXPIREAT, writeFirstKey, execExpireAt, undoExpire)
+	registerCommand(enum.PEXPIRE, writeFirstKey, execPExpire, undoExpire)
+	registerCommand(enum.PEXPIREAT, writeFirstKey, execPExpireAt, undoExpire)
+	registerCommand(enum.PEXPIRETIME, readFirstKey, execPExpireTime, nil)
+	registerCommand(enum.PTTL, readFirstKey, execPTTL, nil)
+	// cluster command
+	registerCommand(enum.DUMPKEY, writeFirstKey, execDumpKey, undoDel)
+	registerCommand(enum.RENAMEFROM, readFirstKey, execRenameFrom, nil)
+	registerCommand(enum.RENAMETO, writeFirstKey, execRenameTo, rollbackFirstKey)
 }
