@@ -103,8 +103,9 @@ func TestWatch(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		key := utils.RandString(10)
 		value := utils.RandString(10)
-		testServer.Exec(conn, utils.ToCmdLine("watch", key))
 		testServer.Exec(conn, utils.ToCmdLine("set", key, value))
+		testServer.Exec(conn, utils.ToCmdLine("watch", key))
+		testServer.Exec(conn, utils.ToCmdLine("sadd", key, value))
 		result := testServer.Exec(conn, utils.ToCmdLine("multi"))
 		asserts.AssertNotError(t, result)
 		key2 := utils.RandString(10)

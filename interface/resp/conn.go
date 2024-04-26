@@ -10,6 +10,7 @@ import (
 // SelectDB selects the db with the given index.
 type Connection interface {
 	io.Writer
+	io.Closer
 	GetDBIndex() int
 	SelectDB(int)
 	RemoteAddr() string

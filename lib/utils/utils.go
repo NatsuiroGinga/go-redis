@@ -87,3 +87,11 @@ func CmdLine2String(cmdLine db.CmdLine) string {
 	}
 	return builder.String()
 }
+
+func CmdLine2Strings(cmdLine db.CmdLine) []string {
+	strs := make([]string, 0, len(cmdLine))
+	for _, line := range cmdLine {
+		strs = append(strs, Bytes2String(line))
+	}
+	return strs
+}

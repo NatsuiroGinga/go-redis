@@ -36,11 +36,25 @@ func EnqueueCmd(conn resp.Connection, cmdLine db.CmdLine) resp.Reply {
 		conn.AddTxError(err)
 		return err
 	}
-	if !validateArity(cmd.arity, cmdLine) {
+	if !ValidateArity(cmd.arity, cmdLine) {
 		err := reply.NewArgNumErrReply(cmdName)
 		conn.AddTxError(err)
 		return err
 	}
 	conn.EnqueueCmd(cmdLine)
 	return reply.NewQueuedReply()
+}
+
+// GetRelatedKeys analysis related keys
+func GetRelatedKeys(cmdLine db.CmdLine) (writeKeys, readKeys []string) {
+	cmdName := strings.ToLower(utils.Bytes2String(cmdLine[0]))
+	cmd, ok := cmdTable[cmdName]
+	if !ok {
+		return nil, nil
+	}
+	prepare := cmd.prepare
+	if prepare == nil {
+		return nil, nil
+	}
+	return prepare(cmdLine[1:])
 }

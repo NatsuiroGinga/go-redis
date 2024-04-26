@@ -8,7 +8,7 @@ import (
 	"go-redis/resp/reply"
 )
 
-var renamenx = cmdFunc(func(clusterDatabase *ClusterDatabase, connection resp.Connection, args db.CmdLine) resp.Reply {
+var execRenameNx = execFunc(func(clusterDatabase *ClusterDatabase, connection resp.Connection, args db.CmdLine) resp.Reply {
 	if len(args) != 3 {
 		return reply.NewArgNumErrReply(enum.RENAMENX.String())
 	}
@@ -34,7 +34,7 @@ var renamenx = cmdFunc(func(clusterDatabase *ClusterDatabase, connection resp.Co
 	}
 	// 2. if newKey doesn't exist in the dst node, use rename
 	if intReply.Code() == 0 {
-		return rename(clusterDatabase, connection, args)
+		return execRename(clusterDatabase, connection, args)
 	}
 
 	return intReply

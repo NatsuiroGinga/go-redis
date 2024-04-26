@@ -120,7 +120,7 @@ func (reply *standardErrReply) Bytes() []byte {
 }
 
 // NewErrReply 用于创建标准错误回复
-func NewErrReply(status string) resp.Reply {
+func NewErrReply(status string) resp.ErrorReply {
 	return &standardErrReply{status}
 }
 

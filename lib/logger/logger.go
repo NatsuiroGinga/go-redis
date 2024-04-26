@@ -9,6 +9,8 @@ import (
 	"runtime"
 	"sync"
 	"time"
+
+	"go-redis/config"
 )
 
 // Settings stores config for logger
@@ -26,7 +28,7 @@ var (
 	logger             *log.Logger
 	mu                 sync.Mutex
 	logPrefix          = ""
-	levelFlags         = []string{"DEBUG", "INFO", "WARN", "ERROR", "FATAL"}
+	levelFlags         = []string{"DEBUG", "INFO", "WARN", "ERROR", "FATAL", "PANIC"}
 )
 
 type logLevel int
@@ -38,6 +40,7 @@ const (
 	WARNING
 	ERROR
 	FATAL
+	PANIC
 )
 
 const flags = log.LstdFlags
@@ -77,6 +80,10 @@ func setPrefix(level logLevel) {
 
 // Debug prints debug log
 func Debug(v ...interface{}) {
+	if !config.Properties.Dev { // dev
+		return
+	}
+
 	mu.Lock()
 	defer mu.Unlock()
 	setPrefix(DEBUG)
@@ -113,4 +120,11 @@ func Fatal(v ...interface{}) {
 	defer mu.Unlock()
 	setPrefix(FATAL)
 	logger.Fatalln(v...)
+}
+
+func Panic(v ...interface{}) {
+	mu.Lock()
+	defer mu.Unlock()
+	setPrefix(PANIC)
+	logger.Panicln(v...)
 }

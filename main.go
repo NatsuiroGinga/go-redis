@@ -21,7 +21,7 @@ func init() {
 
 func main() {
 
-	logger.Info(config.Properties)
+	logger.Debug(config.Properties)
 
 	err := tcp.ListenAndServeWithSignal(
 		&tcp.Config{

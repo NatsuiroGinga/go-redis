@@ -245,11 +245,6 @@ func execLRange(d *DB, args db.Params) resp.Reply {
 // 返回: 被移除元素的数量。 列表不存在时返回 0 。
 func execLRem(d *DB, args db.Params) resp.Reply {
 	key := utils.Bytes2String(args[0])
-	count, err := strconv.Atoi(utils.Bytes2String(args[1]))
-	if err != nil {
-		return reply.NewIntErrReply()
-	}
-	value := args[2]
 
 	l, errReply := d.getList(key)
 	if errReply != nil {
@@ -258,6 +253,12 @@ func execLRem(d *DB, args db.Params) resp.Reply {
 	if l == nil {
 		return reply.NewIntReply(0)
 	}
+
+	count, err := strconv.Atoi(utils.Bytes2String(args[1]))
+	if err != nil {
+		return reply.NewIntErrReply()
+	}
+	value := args[2]
 
 	var removed int
 	if count == 0 { // 移除表中所有与 VALUE 相等的值。

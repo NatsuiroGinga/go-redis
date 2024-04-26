@@ -1,6 +1,10 @@
 package aof
 
 import (
+	"io"
+	"os"
+	"strconv"
+
 	"go-redis/config"
 	"go-redis/enum"
 	"go-redis/interface/db"
@@ -10,9 +14,6 @@ import (
 	"go-redis/resp/connection"
 	"go-redis/resp/parser"
 	"go-redis/resp/reply"
-	"io"
-	"os"
-	"strconv"
 )
 
 const ChanSize = 1 << 16
@@ -38,7 +39,7 @@ func NewHandler(database db.Database) (*Handler, error) {
 		aofChan:     make(chan *payload, ChanSize),
 	}
 	handler.Load()    // 从aof文件加载数据到内存
-	go handler.Save() // 将aof文件保存到磁盘
+	go handler.Save() // 启动一个守护协程, 将aof文件保存到磁盘
 
 	return handler, nil
 }

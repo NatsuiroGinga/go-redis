@@ -32,8 +32,13 @@ func NewRespHandler() (handler *RespHandler) {
 	handler = new(RespHandler)
 
 	if config.Properties.Self != "" && len(config.Properties.Peers) > 0 {
+		logger.Info("start a cluster, self address:", config.Properties.Self,
+			", peers addresses:", config.Properties.Peers)
+
 		handler.db = cluster_database.NewClusterDatabase()
 	} else {
+		logger.Info("start a standalone, self address:", config.Properties.Self)
+
 		handler.db = database2.NewStandaloneDatabase()
 	}
 

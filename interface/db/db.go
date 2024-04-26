@@ -14,6 +14,7 @@ type CmdLine = [][]byte
 type Params = [][]byte
 
 type Database interface {
+	// Exec 不加锁的执行命令
 	Exec(client resp.Connection, args CmdLine) resp.Reply
 	io.Closer
 	AfterClientClose(client resp.Connection)
@@ -32,8 +33,8 @@ func NewDataEntity(data any) *DataEntity {
 // DBEngine is the embedding storage engine exposing more methods for complex application
 type DBEngine interface {
 	Database
-	ExecWithLock(conn resp.Connection, cmdLine CmdLine) resp.Reply
-	ExecMulti(conn resp.Connection, watching map[string]uint32, cmdLines []CmdLine) resp.Reply
+	ExecWithoutLock(conn resp.Connection, cmdLine CmdLine) resp.Reply
+	ExecMulti(conn resp.Connection, cmdLines []CmdLine) resp.Reply
 	GetUndoLogs(dbIndex int, cmdLine [][]byte) []CmdLine
 	ForEach(dbIndex int, cb func(key string, data *DataEntity, expiration *time.Time) bool)
 	RWLocks(dbIndex int, writeKeys []string, readKeys []string)

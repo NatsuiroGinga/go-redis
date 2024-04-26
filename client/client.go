@@ -171,6 +171,7 @@ func (client *Client) doRequest(req *request) {
 		reply.NewBulkReply(req.args[0]),
 		reply.NewMultiBulkReply(req.args)).(resp.Reply)
 	bytes := re.Bytes()
+
 	var err error
 	for i := 0; i < 3; i++ { // only retry, waiting for handleRead
 		_, err = client.conn.Write(bytes)

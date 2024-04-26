@@ -81,6 +81,7 @@ func listenAndServe(listener net.Listener, handler tcp.Handler, closeChan <-chan
 		}
 
 		go logger.Info("accept a new connection:", conn.RemoteAddr())
+
 		// handle the connection in a new goroutine.
 		wg.Add(1)
 

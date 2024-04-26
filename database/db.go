@@ -41,37 +41,39 @@ type DB struct {
 	append     func(db.CmdLine) // 添加一行命令到aof文件
 }
 
-// Exec executes command within one database
+// Exec 单体数据库执行命令, 并发安全
 func (d *DB) Exec(conn resp.Connection, cmd db.CmdLine) resp.Reply {
 	// transaction control commands and other commands which cannot execute within transaction
 	cmdName := strings.ToUpper(utils.Bytes2String(cmd[0]))
 
+	logger.Info("receive command:", utils.CmdLine2String(cmd))
+
 	switch cmdName {
 	case enum.TX_MULTI.String():
-		if !validateArity(enum.TX_MULTI.Arity(), cmd) {
+		if !ValidateArity(enum.TX_MULTI.Arity(), cmd) {
 			return reply.NewArgNumErrReply(cmdName)
 		}
-		return StartMulti(conn)
+		return startMulti(conn)
 	case enum.TX_DISCARD.String():
-		if !validateArity(enum.TX_MULTI.Arity(), cmd) {
+		if !ValidateArity(enum.TX_MULTI.Arity(), cmd) {
 			return reply.NewArgNumErrReply(cmdName)
 		}
-		return DiscardMulti(conn)
+		return discardMulti(conn)
 	case enum.TX_EXEC.String():
-		if !validateArity(enum.TX_EXEC.Arity(), cmd) {
+		if !ValidateArity(enum.TX_EXEC.Arity(), cmd) {
 			return reply.NewArgNumErrReply(cmdName)
 		}
 		return execMulti(d, conn)
 	case enum.TX_WATCH.String(): // 执行watch命令
-		if !validateArity(enum.TX_WATCH.Arity(), cmd) {
+		if !ValidateArity(enum.TX_WATCH.Arity(), cmd) {
 			return reply.NewArgNumErrReply(cmdName)
 		}
-		return Watch(d, conn, cmd[1:])
+		return watch(d, conn, cmd[1:])
 	case enum.TX_UNWATCH.String():
-		if !validateArity(enum.TX_UNWATCH.Arity(), cmd) {
+		if !ValidateArity(enum.TX_UNWATCH.Arity(), cmd) {
 			return reply.NewArgNumErrReply(cmdName)
 		}
-		return UnWatch(conn)
+		return unWatch(conn)
 	}
 	// 如果开始事务, 那么命令加入事务队列
 	// 注意: 过滤掉客户端发的心跳请求, 也就是PING命令
@@ -89,29 +91,28 @@ func execMulti(d *DB, conn resp.Connection) resp.Reply {
 	if len(conn.GetTxErrors()) > 0 {
 		return &reply.NormalErrReply{Status: "EXECABORT Transaction discarded because of previous errors."}
 	}
-	return d.ExecMulti(conn)
+	return d.execMulti(conn, conn.GetQueuedCmdLine())
 }
 
-// Watch 在执行multi之前，先执行watch key1 [key2 …]，可以监视一个或者多个key
+// watch 在执行multi之前，先执行watch key1 [key2 …]，可以监视一个或者多个key
 //
 // 若在事务的exec命令之前这些key对应的值被其他命令所改动了，那么事务中所有命令都将被打断，即事务所有操作将被取消执行。
-func Watch(d *DB, conn resp.Connection, keys db.Params) resp.Reply {
+func watch(d *DB, conn resp.Connection, keys db.Params) resp.Reply {
 	watching := conn.GetWatching()
 	for _, key := range keys {
 		keyStr := utils.Bytes2String(key)
-		watching[keyStr] = d.GetVersion(keyStr)
+		watching[keyStr] = d.getVersion(keyStr)
 	}
 	return reply.NewOKReply()
 }
 
-// ExecMulti 执行事务中的多个命令
+// execMulti 执行事务中的多个命令
 //
 // 在multi使用之前要使用watch给键设置版本号. 如果没有使用watch, 那么不保证隔离性
-func (d *DB) ExecMulti(conn resp.Connection) resp.Reply {
+func (d *DB) execMulti(conn resp.Connection, cmdLines []db.CmdLine) resp.Reply {
 	// 1. 准备事务中的命令会进行读写的键
 	writeKeys := make([]string, 0)
 	readKeys := make([]string, 0)
-	cmdLines := conn.GetQueuedCmdLine()
 
 	for _, cmdLine := range cmdLines {
 		cmdName := strings.ToLower(utils.Bytes2String(cmdLine[0]))
@@ -180,7 +181,7 @@ func (d *DB) ExecMulti(conn resp.Connection) resp.Reply {
 // 如果不一致返回false, 一致 或者 watching为nil 则返回true
 func isWatchingChanged(d *DB, watching map[string]uint32) bool {
 	for key, ver := range watching {
-		currentVersion := d.GetVersion(key)
+		currentVersion := d.getVersion(key)
 		if ver != currentVersion {
 			return true
 		}
@@ -188,8 +189,8 @@ func isWatchingChanged(d *DB, watching map[string]uint32) bool {
 	return false
 }
 
-// DiscardMulti 用来取消一个事务, 并清空命令队列和watching
-func DiscardMulti(conn resp.Connection) resp.Reply {
+// discardMulti 用来取消一个事务, 并清空命令队列和watching
+func discardMulti(conn resp.Connection) resp.Reply {
 	if !conn.InMultiState() {
 		return reply.NewErrReply("DISCARD without MULTI")
 	}
@@ -198,18 +199,18 @@ func DiscardMulti(conn resp.Connection) resp.Reply {
 	return reply.NewOKReply()
 }
 
-// UnWatch 取消watch命令对所有key的监视
-func UnWatch(conn resp.Connection) resp.Reply {
+// unWatch 取消watch命令对所有key的监视
+func unWatch(conn resp.Connection) resp.Reply {
 	conn.ClearWatching()
 	return reply.NewOKReply()
 }
 
-// StartMulti 用来组装一个事务
+// startMulti 用来组装一个事务
 //
 // 从输入Multi命令开始，输入的命令都会依次进入命令队列中，但不会执行
 //
 // 直到输入Exec后，redis会将之前的命令依次执行。
-func StartMulti(conn resp.Connection) resp.Reply {
+func startMulti(conn resp.Connection) resp.Reply {
 	if conn.InMultiState() {
 		return reply.NewErrReply("MULTI calls can not be nested")
 	}
@@ -230,19 +231,22 @@ func (d *DB) execWithLock(cmd db.CmdLine) resp.Reply {
 		return reply.NewUnknownCommandErrReply(instruction)
 	}
 	// 3. 检查参数数量合法性
-	if !validateArity(com.arity, cmd) {
+	if !ValidateArity(com.arity, cmd) {
 		return reply.NewArgNumErrReply(instruction)
 	}
-	// 4. 给要处理的键上读/写锁
+	// 4. 给要处理的键上读/写锁, 抢占到锁就执行, 否则不执行
 	writeKeys, readKeys := com.prepare(cmd[1:])
 	d.RWLocks(writeKeys, readKeys)
 	defer d.RWUnLocks(writeKeys, readKeys)
-	// 5. 要修改的键的版本号加1
-	d.addVersion(writeKeys...)
-	return com.executor(d, cmd[1:])
+	// 5. 如果命令执行成功, 要修改的键的版本号加1
+	r := com.executor(d, cmd[1:])
+	if intReply, ok := r.(*reply.IntReply); !reply.IsErrReply(r) || (ok && intReply.Code() != 0) {
+		d.addVersion(writeKeys...)
+	}
+	return r
 }
 
-// exec 执行命令，并发不安全
+// exec 执行普通命令，并发不安全
 func (d *DB) exec(cmd db.CmdLine) resp.Reply {
 	if len(cmd) == 0 {
 		return reply.NewNoReply()
@@ -255,7 +259,7 @@ func (d *DB) exec(cmd db.CmdLine) resp.Reply {
 		return reply.NewUnknownCommandErrReply(instruction)
 	}
 	// 3. 检查参数数量合法性
-	if !validateArity(com.arity, cmd) {
+	if !ValidateArity(com.arity, cmd) {
 		return reply.NewArgNumErrReply(instruction)
 	}
 	return com.executor(d, cmd[1:])
@@ -392,10 +396,10 @@ func (d *DB) expireIfNeeded(key string) bool {
 	return isExpire
 }
 
-// validateArity 验证输入的命令参数是否与设定的命令的参数数量一致
+// ValidateArity 验证输入的命令参数是否与设定的命令的参数数量一致
 //
 // 如果命令是可变长参数, 则返回len(cmd) >= -arity的结果, 否则返回len(cmd) == arity的结果
-func validateArity(arity int, cmd db.CmdLine) bool {
+func ValidateArity(arity int, cmd db.CmdLine) bool {
 	argNum := len(cmd)
 	if arity > 0 {
 		return arity == argNum
@@ -414,8 +418,8 @@ func (d *DB) Flush() {
 	// d.versionMap.Clear()
 }
 
-// GetVersion 获取key的version, 并发不安全
-func (d *DB) GetVersion(key string) uint32 {
+// getVersion 获取key的version, 并发不安全
+func (d *DB) getVersion(key string) uint32 {
 	entity, ok := d.versionMap.Get(key)
 	if !ok {
 		return 0
@@ -426,9 +430,23 @@ func (d *DB) GetVersion(key string) uint32 {
 // addVersion 把key的版本号加1, 并发不安全
 func (d *DB) addVersion(keys ...string) {
 	for _, key := range keys {
-		versionCode := d.GetVersion(key)
+		versionCode := d.getVersion(key)
 		d.versionMap.Set(key, versionCode+1)
 	}
+}
+
+func (d *DB) ForEach(cb func(key string, data *db.DataEntity, expiration *time.Time) bool) {
+	d.data.ForEach(func(key string, raw interface{}) bool {
+		entity, _ := raw.(*db.DataEntity)
+		var expiration *time.Time
+		rawExpireTime, ok := d.ttl.Get(key)
+		if ok {
+			expireTime, _ := rawExpireTime.(time.Time)
+			expiration = &expireTime
+		}
+
+		return cb(key, entity, expiration)
+	})
 }
 
 // newDB creates a new database with the given index.

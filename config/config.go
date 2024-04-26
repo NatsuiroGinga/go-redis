@@ -2,13 +2,12 @@ package config
 
 import (
 	"bufio"
+	"fmt"
 	"io"
 	"os"
 	"reflect"
 	"strconv"
 	"strings"
-
-	"go-redis/lib/logger"
 )
 
 const configFile = "redis.conf"
@@ -18,30 +17,36 @@ func fileExists(filename string) bool {
 	return err == nil && !stat.IsDir()
 }
 
-// ServerProperties defines global config properties
-type ServerProperties struct {
+// serverProperties defines global config properties
+type serverProperties struct {
 	Bind                string `cfg:"bind"`                   // 绑定的ip, 默认127.0.0.1
 	Port                int    `cfg:"port"`                   // 端口, 默认6379
 	AppendOnly          bool   `cfg:"append-only"`            // 是否启动aof, 默认不启动
 	AppendFilename      string `cfg:"append-filename"`        // aof文件名, 默认redis.conf
 	MaxClients          int    `cfg:"max-clients"`            // 最大客户端数
-	RequirePass         string `cfg:"require-pass"`           // 需要密码
+	RequirePass         string `cfg:"require-pass"`           // 是否需要密码
 	Databases           int    `cfg:"databases"`              // 数据库量,  默认16
 	Cycle               int    `cfg:"cycle"`                  // 清理过期数据的周期, 单位是s, 默认1s
 	Buckets             int    `cfg:"buckets"`                // 放数据的桶的数量, 默认65536
 	ListMaxShardSize    int    `cfg:"list-max-shard-size"`    // quicklist中每一个分片所存储的数据最大容量, 默认8kb
 	SetMaxIntSetEntries int    `cfg:"set-max-intset-entries"` // intset中可以存储的最大元素个数, 默认为512
+	// cluster
+	Peers []string `cfg:"peers"` // 所有集群节点的地址
+	Self  string   `cfg:"self"`  // 本身的地址
+	// dev
+	Dev bool // 是否在测试状态, 如果在测试会开启Debug输出, 否则关闭Debug, 默认开启
+}
 
-	Peers []string `cfg:"peers"`
-	Self  string   `cfg:"self"`
+func (properties *serverProperties) String() string {
+	return fmt.Sprintf("%#v", *properties)
 }
 
 // Properties holds global config properties
-var Properties *ServerProperties
+var Properties *serverProperties
 
 func init() {
 	// default config
-	Properties = &ServerProperties{
+	Properties = &serverProperties{
 		Bind:                "127.0.0.1",
 		Port:                6379,
 		AppendOnly:          false,
@@ -50,14 +55,15 @@ func init() {
 		ListMaxShardSize:    8 << 10,
 		Databases:           1 << 4,
 		SetMaxIntSetEntries: 512,
+		Dev:                 true,
 	}
-
+	// read config file to rewrite `Properties`
 	if fileExists(configFile) {
-		setupConfig(configFile)
+		SetupConfig(configFile)
 	}
 }
 
-func parse(src io.Reader) *ServerProperties {
+func parse(src io.Reader) *serverProperties {
 	config := Properties
 
 	// read config file
@@ -76,7 +82,7 @@ func parse(src io.Reader) *ServerProperties {
 		}
 	}
 	if err := scanner.Err(); err != nil {
-		logger.Fatal(err)
+		panic(err)
 	}
 
 	// parse format
@@ -107,6 +113,11 @@ func parse(src io.Reader) *ServerProperties {
 			case reflect.Slice:
 				if field.Type.Elem().Kind() == reflect.String {
 					slice := strings.Split(value, ",")
+
+					for j := range slice {
+						slice[j] = strings.TrimSpace(slice[j])
+					}
+
 					fieldVal.Set(reflect.ValueOf(slice))
 				}
 			default:
@@ -117,8 +128,8 @@ func parse(src io.Reader) *ServerProperties {
 	return config
 }
 
-// setupConfig read config file and store properties into Properties
-func setupConfig(configFilename string) {
+// SetupConfig read config file and store properties into Properties
+func SetupConfig(configFilename string) {
 	file, err := os.Open(configFilename)
 	if err != nil {
 		panic(err)

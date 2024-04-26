@@ -294,11 +294,6 @@ func execGenericZRangeByScoreCommand(d *DB, args db.Params, cmd *enum.Command) r
 func execZRem(d *DB, args db.Params) resp.Reply {
 	// parse args
 	key := utils.Bytes2String(args[0])
-	fields := make([]string, len(args)-1)
-	fieldArgs := args[1:]
-	for i, v := range fieldArgs {
-		fields[i] = utils.Bytes2String(v)
-	}
 
 	// get entity
 	sortedSet, errReply := d.getSortedSet(key)
@@ -307,6 +302,12 @@ func execZRem(d *DB, args db.Params) resp.Reply {
 	}
 	if sortedSet == nil {
 		return reply.NewIntReply(0)
+	}
+
+	fields := make([]string, len(args)-1)
+	fieldArgs := args[1:]
+	for i, v := range fieldArgs {
+		fields[i] = utils.Bytes2String(v)
 	}
 
 	var deleted int64 = 0
@@ -366,10 +367,6 @@ func execZRemRangeByScore(d *DB, args db.Params) resp.Reply {
 // 返回: 被移除成员的数量。
 func execZRemRangeByRank(d *DB, args db.Params) resp.Reply {
 	key := utils.Bytes2String(args[0])
-	start, stop, errorReply := getInterval(args)
-	if errorReply != nil {
-		return errorReply
-	}
 
 	// get data
 	sortedSet, errReply := d.getSortedSet(key)
@@ -378,6 +375,11 @@ func execZRemRangeByRank(d *DB, args db.Params) resp.Reply {
 	}
 	if sortedSet == nil {
 		return reply.NewIntReply(0)
+	}
+
+	start, stop, errorReply := getInterval(args)
+	if errorReply != nil {
+		return errorReply
 	}
 
 	if err := computeInterval(sortedSet.Length(), &start, &stop); err != nil {

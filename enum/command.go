@@ -34,17 +34,22 @@ func (cmd *Command) Arity() int {
 	return utils.If(cmd.paramCount >= 0, cmd.paramCount+1, cmd.paramCount-1)
 }
 
-// keys
+// db command
+var (
+	FLUSHALL = &Command{"FLUSHALL", 0}
+	PING     = &Command{name: "PING", paramCount: 0}
+	SELECT   = &Command{name: "SELECT", paramCount: 1}
+)
+
+// keys command
 var (
 	DEL         = &Command{name: "DEL", paramCount: -1}
-	PING        = &Command{name: "PING", paramCount: 0}
 	EXISTS      = &Command{name: "EXISTS", paramCount: -1}
 	FLUSHDB     = &Command{name: "FLUSHDB", paramCount: 0}
 	TYPE        = &Command{name: "TYPE", paramCount: 1}
 	RENAME      = &Command{name: "RENAME", paramCount: 2}
 	RENAMENX    = &Command{name: "RENAMENX", paramCount: 2}
 	KEYS        = &Command{name: "KEYS", paramCount: 1}
-	SELECT      = &Command{name: "SELECT", paramCount: 1}
 	EXPIRE      = &Command{name: "EXPIRE", paramCount: 2}
 	EXPIREAT    = &Command{name: "EXPIREAT", paramCount: 2}
 	EXPIRETIME  = &Command{name: "EXPIRETIME", paramCount: 1}
@@ -56,10 +61,12 @@ var (
 	PERSIST     = &Command{name: "PERSIST", paramCount: 2}
 )
 
-// string
+// string command
 var (
 	GET    = &Command{name: "GET", paramCount: 1}
 	SET    = &Command{name: "SET", paramCount: 2}
+	MSET   = &Command{name: "MSET", paramCount: -2}
+	MGET   = &Command{name: "MGET", paramCount: -1}
 	SETNX  = &Command{name: "SETNX", paramCount: 2}
 	STRLEN = &Command{name: "STRLEN", paramCount: 1}
 	GETSET = &Command{name: "GETSET", paramCount: 2}
@@ -67,7 +74,7 @@ var (
 	DECR   = &Command{name: "DECR", paramCount: 1}
 )
 
-// zset
+// zset command
 var (
 	ZADD             = &Command{name: "ZADD", paramCount: -4}
 	ZSCORE           = &Command{name: "ZSCORE", paramCount: 2}
@@ -87,7 +94,7 @@ var (
 	ZREMRANGEBYRANK  = &Command{name: "ZREMRANGEBYRANK", paramCount: 3}
 )
 
-// list
+// list command
 var (
 	LPUSH     = &Command{name: "LPUSH", paramCount: -2}
 	LPUSHX    = &Command{name: "LPUSHX", paramCount: -2}
@@ -105,7 +112,7 @@ var (
 	LINSERT   = &Command{name: "LINSERT", paramCount: 4}
 )
 
-// hash
+// hash command
 var (
 	HDEL    = &Command{name: "HDEL", paramCount: -2}
 	HEXISTS = &Command{name: "HEXISTS", paramCount: 2}
@@ -120,7 +127,7 @@ var (
 	HVALS   = &Command{name: "HVALS", paramCount: 1}
 )
 
-// set
+// set command
 var (
 	SADD        = &Command{name: "SADD", paramCount: -2}
 	SCARD       = &Command{name: "SCARD", paramCount: 1}
@@ -138,13 +145,30 @@ var (
 	SUNIONSTORE = &Command{name: "SUNIONSTORE", paramCount: -2}
 )
 
-// transactions
+// transactions command
 var (
+	// local
 	TX_MULTI   = &Command{name: "MULTI", paramCount: 0}
 	TX_EXEC    = &Command{name: "EXEC", paramCount: 0}
 	TX_DISCARD = &Command{name: "DISCARD", paramCount: 0}
 	TX_WATCH   = &Command{name: "WATCH", paramCount: -1}
 	TX_UNWATCH = &Command{name: "UNWATCH", paramCount: 0}
+	// cluster
+	TCC_PREPARE  = &Command{name: "PREPARE", paramCount: -2}
+	TCC_COMMIT   = &Command{name: "COMMIT", paramCount: 1}
+	TCC_ROLLBACK = &Command{name: "ROLLBACK", paramCount: 1}
+)
+
+// cluster command
+var (
+	RENAMEFROM = &Command{name: "RENAMEFROM", paramCount: 1}
+	DUMPKEY    = &Command{name: "DUMPKEY", paramCount: 1}
+	RENAMETO   = &Command{name: "RENAMETO", paramCount: 3}
+)
+
+// system command
+var (
+	SYS_AUTH = &Command{name: "AUTH", paramCount: 1}
 )
 
 // Command flags

@@ -4,6 +4,7 @@ import (
 	"strconv"
 	"time"
 
+	"go-redis/aof"
 	"go-redis/datastruct/dict"
 	"go-redis/datastruct/list"
 	"go-redis/datastruct/set"
@@ -13,6 +14,7 @@ import (
 	"go-redis/interface/resp"
 	"go-redis/lib/utils"
 	"go-redis/lib/wildcard"
+	"go-redis/resp/parser"
 	"go-redis/resp/reply"
 )
 
@@ -381,7 +383,7 @@ func execPTTL(d *DB, args db.Params) resp.Reply {
 // 例如: 现有a, ab, abc, z四个key, 使用keys a*命令会返回a, ab, abc, 因为以上三个命令符合a*这个模板
 func execKeys(d *DB, args db.Params) resp.Reply {
 	// 1. 取出key, pattern
-	key := string(args[0])
+	key := utils.Bytes2String(args[0])
 	pattern := wildcard.CompilePattern(key)
 	result := make([][]byte, 0)
 	// 2. 从数据字典中查询符合pattern且没过期的key
@@ -425,6 +427,63 @@ func toTTLCmd(d *DB, key string) *reply.MultiBulkReply {
 	return reply.NewMultiBulkReply(utils.ToCmdLine(enum.PEXPIREAT.String(), key, timestamp))
 }
 
+// execDumpKey returns redis serialization protocol data of given key (see aof.EntityToCmd)
+func execDumpKey(d *DB, args db.CmdLine) resp.Reply {
+	key := utils.Bytes2String(args[0])
+	entity, ok := d.getEntity(key)
+	if !ok {
+		return reply.NewEmptyMultiBulkReply()
+	}
+	dumpCmd := aof.Entity2Cmd(key, entity)
+	ttlCmd := toTTLCmd(d, key)
+	return reply.NewMultiBulkReply([][]byte{
+		dumpCmd.Bytes(),
+		ttlCmd.Bytes(),
+	})
+}
+
+// execRenameFrom 删除旧的key
+func execRenameFrom(d *DB, args [][]byte) resp.Reply {
+	key := utils.Bytes2String(args[0])
+	d.Remove(key)
+	return reply.NewOKReply()
+}
+
+// execRenameTo 把旧key对应的值存储到新key中, 必须使用事务保证一致性
+// # RENAMETO key dumpCmd ttlCmd
+func execRenameTo(d *DB, args db.CmdLine) resp.Reply {
+	key := args[0]
+	dumpRawCmd, err := parser.ParseOne(args[1])
+	if err != nil {
+		return reply.NewErrReply("illegal dump cmd: " + err.Error())
+	}
+	dumpCmd, ok := dumpRawCmd.(*reply.MultiBulkReply)
+	if !ok {
+		return reply.NewErrReply("dump cmd is not multi bulk reply")
+	}
+	dumpCmd.Args[1] = key // change key
+	ttlRawCmd, err := parser.ParseOne(args[2])
+	if err != nil {
+		return reply.NewErrReply("illegal ttl cmd: " + err.Error())
+	}
+	ttlCmd, ok := ttlRawCmd.(*reply.MultiBulkReply)
+	if !ok {
+		return reply.NewErrReply("ttl cmd is not multi bulk reply")
+	}
+	ttlCmd.Args[1] = key
+	d.Remove(string(key))
+	// 在cluster层已经给数据上锁了
+	dumpResult := d.exec(dumpCmd.Args)
+	if reply.IsErrReply(dumpResult) {
+		return dumpResult
+	}
+	ttlResult := d.exec(ttlCmd.Args)
+	if reply.IsErrReply(ttlResult) {
+		return ttlResult
+	}
+	return reply.NewOKReply()
+}
+
 func init() {
 	registerCommand(enum.DEL, writeAllKeys, execDel, undoDel)
 	registerCommand(enum.EXISTS, readAllKeys, execExists, nil)
@@ -441,4 +500,8 @@ func init() {
 	registerCommand(enum.PEXPIREAT, writeFirstKey, execPExpireAt, undoExpire)
 	registerCommand(enum.PEXPIRETIME, readFirstKey, execPExpireTime, nil)
 	registerCommand(enum.PTTL, readFirstKey, execPTTL, nil)
+	// cluster command
+	registerCommand(enum.DUMPKEY, writeFirstKey, execDumpKey, undoDel)
+	registerCommand(enum.RENAMEFROM, readFirstKey, execRenameFrom, nil)
+	registerCommand(enum.RENAMETO, writeFirstKey, execRenameTo, rollbackFirstKey)
 }

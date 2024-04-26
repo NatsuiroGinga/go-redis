@@ -144,11 +144,6 @@ func execHExists(d *DB, args db.Params) resp.Reply {
 // 返回: 被成功删除字段的数量，不包括被忽略的字段。
 func execHDel(d *DB, args db.Params) resp.Reply {
 	key := utils.Bytes2String(args[0])
-	fields := make([]string, len(args)-1)
-	fieldArgs := args[1:]
-	for i, v := range fieldArgs {
-		fields[i] = utils.Bytes2String(v)
-	}
 
 	hashTable, errReply := d.getDict(key)
 	if errReply != nil {
@@ -156,6 +151,12 @@ func execHDel(d *DB, args db.Params) resp.Reply {
 	}
 	if hashTable == nil {
 		return reply.NewIntReply(0)
+	}
+
+	fields := make([]string, len(args)-1)
+	fieldArgs := args[1:]
+	for i, v := range fieldArgs {
+		fields[i] = utils.Bytes2String(v)
 	}
 
 	deleted := 0

@@ -261,7 +261,7 @@ func (dict *ConcurrentDict) RandomKeys(n int) (keys []string) {
 // RandomKey returns a key randomly
 func (shard *shard) RandomKey() string {
 	if shard == nil {
-		logger.Fatal(enum.SHARD_IS_NIL)
+		logger.Panic(enum.SHARD_IS_NIL)
 	}
 
 	shard.mu.RLock()
@@ -426,7 +426,7 @@ func (dict *ConcurrentDict) toLockIndices(keys []string, reverse bool) (indices 
 
 func (dict *ConcurrentDict) RWLocks(writeKeys, readKeys []string) {
 	if dict == nil {
-		logger.Fatal(enum.DICT_IS_NIL)
+		logger.Panic(enum.DICT_IS_NIL)
 	}
 	if len(writeKeys) == 0 && len(readKeys) == 0 {
 		return

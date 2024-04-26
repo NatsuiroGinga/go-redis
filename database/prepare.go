@@ -55,3 +55,12 @@ func prepareSetCalculate(args db.Params) (writeKeys []string, readKeys []string)
 	}
 	return nil, keys
 }
+
+func prepareMSet(args [][]byte) (writeKeys []string, readKeys []string) {
+	size := len(args) / 2
+	keys := make([]string, size)
+	for i := 0; i < size; i++ {
+		keys[i] = string(args[2*i])
+	}
+	return keys, nil
+}

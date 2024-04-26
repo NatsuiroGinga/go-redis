@@ -21,49 +21,55 @@ type StandaloneDatabase struct {
 	aofHandler *aof.Handler // aof处理器
 }
 
-func (database *StandaloneDatabase) ExecWithLock(conn resp.Connection, cmdLine db.CmdLine) resp.Reply {
-	// TODO implement me
-	panic("implement me")
+// ExecWithoutLock 不加锁就执行命令, 并发不安全
+func (database *StandaloneDatabase) ExecWithoutLock(conn resp.Connection, cmdLine db.CmdLine) resp.Reply {
+	d, errReply := database.selectDB(conn.GetDBIndex())
+	if errReply != nil {
+		return errReply
+	}
+	return d.exec(cmdLine)
 }
 
-func (database *StandaloneDatabase) ExecMulti(conn resp.Connection, watching map[string]uint32, cmdLines []db.CmdLine) resp.Reply {
-	// TODO implement me
-	panic("implement me")
+func (database *StandaloneDatabase) ExecMulti(conn resp.Connection, cmdLines []db.CmdLine) resp.Reply {
+	selectedDB, errReply := database.selectDB(conn.GetDBIndex())
+	if errReply != nil {
+		return errReply
+	}
+	return selectedDB.execMulti(conn, cmdLines)
 }
 
-func (database *StandaloneDatabase) GetUndoLogs(dbIndex int, cmdLine [][]byte) []db.CmdLine {
-	// TODO implement me
-	panic("implement me")
+func (database *StandaloneDatabase) GetUndoLogs(dbIndex int, cmdLine db.CmdLine) []db.CmdLine {
+	return database.mustSelectDB(dbIndex).GetUndoLogs(cmdLine)
 }
 
 func (database *StandaloneDatabase) ForEach(dbIndex int, cb func(key string, data *db.DataEntity, expiration *time.Time) bool) {
-	// TODO implement me
-	panic("implement me")
+	database.mustSelectDB(dbIndex).ForEach(cb)
 }
 
-func (database *StandaloneDatabase) RWLocks(dbIndex int, writeKeys []string, readKeys []string) {
-	// TODO implement me
-	panic("implement me")
+func (database *StandaloneDatabase) RWLocks(dbIndex int, writeKeys, readKeys []string) {
+	database.mustSelectDB(dbIndex).RWLocks(writeKeys, readKeys)
 }
 
 func (database *StandaloneDatabase) RWUnLocks(dbIndex int, writeKeys []string, readKeys []string) {
-	// TODO implement me
-	panic("implement me")
+	database.mustSelectDB(dbIndex).RWUnLocks(writeKeys, readKeys)
 }
 
-func (database *StandaloneDatabase) GetDBSize(dbIndex int) (int, int) {
-	// TODO implement me
-	panic("implement me")
+func (database *StandaloneDatabase) GetDBSize(dbIndex int) (dataSize int, ttlSize int) {
+	d := database.mustSelectDB(dbIndex)
+	return d.data.Len(), d.ttl.Len()
 }
 
 func (database *StandaloneDatabase) GetEntity(dbIndex int, key string) (*db.DataEntity, bool) {
-	// TODO implement me
-	panic("implement me")
+	return database.mustSelectDB(dbIndex).getEntity(key)
 }
 
 func (database *StandaloneDatabase) GetExpiration(dbIndex int, key string) *time.Time {
-	// TODO implement me
-	panic("implement me")
+	raw, ok := database.mustSelectDB(dbIndex).ttl.Get(key)
+	if !ok {
+		return nil
+	}
+	expireTime, _ := raw.(time.Time)
+	return &expireTime
 }
 
 func NewStandaloneDatabase() *StandaloneDatabase {
@@ -103,12 +109,28 @@ func (database *StandaloneDatabase) Exec(client resp.Connection, args db.CmdLine
 		}
 	}()
 	cmdName := strings.ToUpper(utils.Bytes2String(args[0]))
-	// select command
+
+	// FlushAll
+	if cmdName == enum.FLUSHALL.String() {
+		return database.flushAll()
+	}
+	// Select
 	if cmdName == enum.SELECT.String() {
-		if len(args) == 2 {
+		if ValidateArity(enum.SELECT.Arity(), args) {
 			return execSelect(client, database, args[1:])
 		}
 		return reply.NewArgNumErrReply(cmdName)
+	}
+	// FlushDB
+	if cmdName == enum.FLUSHDB.String() && client.InMultiState() {
+		return reply.NewErrReply("command 'FlushDB' cannot be used in MULTI")
+	}
+	// Auth
+	if cmdName == enum.SYS_AUTH.String() {
+		return Auth(client, args[1:])
+	}
+	if !IsAuthenticated(client) {
+		return &reply.NormalErrReply{Status: "NOAUTH Authentication required"}
 	}
 
 	dbIndex := client.GetDBIndex()
@@ -123,6 +145,22 @@ func (database *StandaloneDatabase) Close() error {
 func (database *StandaloneDatabase) AfterClientClose(_ resp.Connection) {
 }
 
+func (database *StandaloneDatabase) selectDB(dbIndex int) (*DB, resp.ErrorReply) {
+	if dbIndex >= len(database.dbSet) || dbIndex < 0 {
+		return nil, reply.NewErrReply("DB index is out of range")
+	}
+	return database.dbSet[dbIndex], nil
+}
+
+// mustSelectDB is like selectDB, but panics if an error occurs.
+func (database *StandaloneDatabase) mustSelectDB(dbIndex int) *DB {
+	selectedDB, err := database.selectDB(dbIndex)
+	if err != nil {
+		logger.Panic(err)
+	}
+	return selectedDB
+}
+
 func execSelect(conn resp.Connection, database *StandaloneDatabase, args db.CmdLine) resp.Reply {
 	dbIndex, err := strconv.Atoi(string(args[0]))
 	if err != nil {
@@ -133,5 +171,33 @@ func execSelect(conn resp.Connection, database *StandaloneDatabase, args db.CmdL
 	}
 	conn.SelectDB(dbIndex)
 
+	return reply.NewOKReply()
+}
+
+// flushAll flushes all databases.
+func (database *StandaloneDatabase) flushAll() resp.Reply {
+	for i := range database.dbSet {
+		database.flushDB(i)
+	}
+	return reply.NewOKReply()
+}
+
+// flushDB flushes the selected database
+func (database *StandaloneDatabase) flushDB(dbIndex int) resp.Reply {
+	if dbIndex >= len(database.dbSet) || dbIndex < 0 {
+		return reply.NewErrReply("DB index is out of range")
+	}
+	database.setDB(dbIndex, newDB(dbIndex))
+	return reply.NewOKReply()
+}
+
+func (database *StandaloneDatabase) setDB(dbIndex int, newDB *DB) resp.Reply {
+	if dbIndex >= len(database.dbSet) || dbIndex < 0 {
+		return reply.NewErrReply("DB index is out of range")
+	}
+	oldDB := database.mustSelectDB(dbIndex)
+	newDB.index = dbIndex
+	newDB.append = oldDB.append // inherit oldDB
+	database.dbSet[dbIndex] = newDB
 	return reply.NewOKReply()
 }
