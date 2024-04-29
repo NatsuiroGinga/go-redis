@@ -1,8 +1,10 @@
 package database
 
 import (
+	"reflect"
 	"testing"
 
+	"go-redis/datastruct/list"
 	"go-redis/enum"
 	"go-redis/lib/utils"
 	"go-redis/resp/reply"
@@ -12,6 +14,14 @@ var testDB *DB
 
 func init() {
 	testDB = newDB(0)
+}
+
+func TestParse(t *testing.T) {
+	l := list.NewQuickList()
+	l.Insert(0, int8(8))
+	val := l.Get(0)
+	valType := reflect.TypeOf(val)
+	t.Log(valType.Kind())
 }
 
 func TestPush(t *testing.T) {

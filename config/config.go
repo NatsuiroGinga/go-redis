@@ -22,7 +22,7 @@ type serverProperties struct {
 	Bind                string `cfg:"bind"`                   // 绑定的ip, 默认127.0.0.1
 	Port                int    `cfg:"port"`                   // 端口, 默认6379
 	AppendOnly          bool   `cfg:"append-only"`            // 是否启动aof, 默认不启动
-	AppendFilename      string `cfg:"append-filename"`        // aof文件名, 默认redis.conf
+	AppendFilename      string `cfg:"append-filename"`        // aof文件名
 	MaxClients          int    `cfg:"max-clients"`            // 最大客户端数
 	RequirePass         string `cfg:"require-pass"`           // 是否需要密码
 	Databases           int    `cfg:"databases"`              // 数据库量,  默认16

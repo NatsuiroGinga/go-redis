@@ -23,7 +23,7 @@ type TimeWheel struct {
 	slotNum           int // 时间轮槽slot数量
 	addTaskChannel    chan task
 	removeTaskChannel chan string
-	stopChannel       chan bool
+	stopChannel       chan struct{}
 }
 
 type task struct {
@@ -46,7 +46,7 @@ func NewTimeWheel(interval time.Duration, slotNum int) *TimeWheel {
 		slotNum:           slotNum,
 		addTaskChannel:    make(chan task),
 		removeTaskChannel: make(chan string),
-		stopChannel:       make(chan bool),
+		stopChannel:       make(chan struct{}),
 	}
 	tw.initSlots()
 
@@ -67,7 +67,7 @@ func (tw *TimeWheel) Start() {
 
 // Stop stops the time wheel
 func (tw *TimeWheel) Stop() {
-	tw.stopChannel <- true
+	tw.stopChannel <- struct{}{}
 }
 
 // AddJob add new job into pending queue
@@ -105,11 +105,7 @@ func (tw *TimeWheel) start() {
 
 func (tw *TimeWheel) tickHandler() {
 	l := tw.slots[tw.currentPos]
-	if tw.currentPos == tw.slotNum-1 {
-		tw.currentPos = 0
-	} else {
-		tw.currentPos++
-	}
+	tw.currentPos = (tw.currentPos + 1) % tw.slotNum
 	go tw.scanAndRunTask(l)
 }
 

@@ -9,6 +9,7 @@ import (
 	"go-redis/datastruct/list"
 	"go-redis/datastruct/set"
 	"go-redis/datastruct/sortedset"
+	string2 "go-redis/datastruct/string"
 	"go-redis/enum"
 	"go-redis/interface/db"
 	"go-redis/interface/resp"
@@ -79,7 +80,7 @@ func execType(d *DB, args db.Params) resp.Reply {
 	}
 
 	switch entity.Data.(type) {
-	case []byte, string:
+	case *string2.String:
 		return reply.NewStatusReply(enum.TYPE_STRING.String())
 	case sortedset.SortedSet:
 		return reply.NewStatusReply(enum.TYPE_ZSET.String())

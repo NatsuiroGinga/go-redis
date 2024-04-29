@@ -53,14 +53,7 @@ func (set *IntSet) Add(val any) int {
 
 	// 4. 添加新元素
 	set.contents = slices.Insert(set.contents, pos*int(newEncoding), make([]byte, newEncoding)...)
-	switch newEncoding {
-	case 2:
-		*(*int16)(unsafe.Pointer(&set.contents[pos*2])) = int16(value)
-	case 4:
-		*(*int32)(unsafe.Pointer(&set.contents[pos*4])) = int32(value)
-	case 8:
-		*(*int64)(unsafe.Pointer(&set.contents[pos*8])) = value
-	}
+	*(*int64)(unsafe.Pointer(&set.contents[pos*int(newEncoding)])) = value
 	// 5. 集合元素数量加1
 	set.length++
 
@@ -83,22 +76,12 @@ func (set *IntSet) intsetSearch(value int64) (found bool, pos int) {
 // get 从 IntSet 中获取指定位置的整数值
 func (set *IntSet) get(pos int) int64 {
 	switch set.encoding {
-	case 2:
-		return int64(int16(set.contents[pos*2]) | int16(set.contents[pos*2+1])<<8)
-	case 4:
-		return int64(int32(set.contents[pos*4]) |
-			int32(set.contents[pos*4+1])<<8 |
-			int32(set.contents[pos*4+2])<<16 |
-			int32(set.contents[pos*4+3])<<24)
-	case 8:
-		return int64(set.contents[pos*8]) |
-			int64(set.contents[pos*8+1])<<8 |
-			int64(set.contents[pos*8+2])<<16 |
-			int64(set.contents[pos*8+3])<<24 |
-			int64(set.contents[pos*8+4])<<32 |
-			int64(set.contents[pos*8+5])<<40 |
-			int64(set.contents[pos*8+6])<<48 |
-			int64(set.contents[pos*8+7])<<56
+	case 2: // 取2字节
+		return int64(*(*int16)(unsafe.Pointer(&set.contents[pos*2])))
+	case 4: // 取4字节
+		return int64(*(*int32)(unsafe.Pointer(&set.contents[pos*4])))
+	case 8: // 取8字节
+		return *(*int64)(unsafe.Pointer(&set.contents[pos*8]))
 	default:
 		panic("unsupported encoding")
 	}
@@ -215,15 +198,7 @@ func NewIntSet() *IntSet {
 func (set *IntSet) print() {
 	fmt.Printf("IntSet encoding: %d-bit, length: %d, contents: ", set.encoding*8, set.Len())
 	for i := 0; i < set.Len(); i++ {
-		var val any
-		switch set.encoding {
-		case 2:
-			val = *(*int16)(unsafe.Pointer(&set.contents[i*2]))
-		case 4:
-			val = *(*int32)(unsafe.Pointer(&set.contents[i*4]))
-		case 8:
-			val = *(*int64)(unsafe.Pointer(&set.contents[i*8]))
-		}
+		val := set.get(i)
 		fmt.Printf("%d ", val)
 	}
 	fmt.Println()
