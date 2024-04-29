@@ -188,7 +188,7 @@ func encodeInt(val int64) any {
 func parseAny(value any) []byte {
 	val := reflect.ValueOf(value)
 	if val.CanInt() {
-		return []byte(strconv.FormatInt(val.Int(), 10))
+		return utils.String2Bytes(strconv.FormatInt(val.Int(), 10))
 	}
 	return val.Bytes()
 }

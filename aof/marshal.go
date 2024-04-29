@@ -1,6 +1,7 @@
 package aof
 
 import (
+	"reflect"
 	"strconv"
 	"time"
 
@@ -8,6 +9,7 @@ import (
 	"go-redis/datastruct/list"
 	"go-redis/datastruct/set"
 	"go-redis/datastruct/sortedset"
+	string2 "go-redis/datastruct/string"
 	"go-redis/enum"
 	"go-redis/interface/db"
 	"go-redis/lib/logger"
@@ -16,9 +18,18 @@ import (
 )
 
 // string2Cmd 把string序列化成resp格式的命令
-func string2Cmd(key string, val []byte) *reply.MultiBulkReply {
-	cmd := utils.ToCmdLine2(enum.SET.String(), utils.String2Bytes(key), val)
+func string2Cmd(key string, val *string2.String) *reply.MultiBulkReply {
+	cmd := utils.ToCmdLine2(enum.SET.String(), utils.String2Bytes(key), val.Bytes())
 	return reply.NewMultiBulkReply(cmd)
+}
+
+// parseAny 把any类型的val转化为byte数组
+func parseAny(value any) []byte {
+	val := reflect.ValueOf(value)
+	if val.CanInt() {
+		return utils.String2Bytes(strconv.FormatInt(val.Int(), 10))
+	}
+	return val.Bytes()
 }
 
 // Entity2Cmd 把数据实体序列化为resp格式的命令
@@ -28,7 +39,7 @@ func Entity2Cmd(key string, entity *db.DataEntity) *reply.MultiBulkReply {
 	}
 	var cmd *reply.MultiBulkReply
 	switch val := entity.Data.(type) {
-	case []byte:
+	case *string2.String:
 		cmd = string2Cmd(key, val)
 	case list.List:
 		cmd = list2Cmd(key, val)
@@ -50,7 +61,7 @@ func list2Cmd(key string, l list.List) *reply.MultiBulkReply {
 	cmd[0] = enum.RPUSH.Bytes()
 	cmd[1] = utils.String2Bytes(key)
 	l.ForEach(func(i int, val any) bool {
-		cmd[2+i] = val.([]byte)
+		cmd[2+i] = parseAny(val)
 		return true
 	})
 	return reply.NewMultiBulkReply(cmd)
@@ -71,7 +82,7 @@ func hash2Cmd(key string, hashTable dict.Dict) *reply.MultiBulkReply {
 	cmd := make([][]byte, 0, hashTable.Len()+2)
 	cmd = append(cmd, enum.HMSET.Bytes(), utils.String2Bytes(key))
 	hashTable.ForEach(func(key string, value any) bool {
-		cmd = append(cmd, utils.String2Bytes(key), value.([]byte))
+		cmd = append(cmd, utils.String2Bytes(key), parseAny(value))
 		return true
 	})
 	return reply.NewMultiBulkReply(cmd)
