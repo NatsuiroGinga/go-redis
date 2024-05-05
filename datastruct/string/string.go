@@ -11,7 +11,10 @@ import (
 type String struct {
 	encoding StrType
 	content  []byte
-	buf      unsafe.Pointer
+}
+
+func (str *String) Append(val []byte) {
+	str.content = append(str.content, val...)
 }
 
 func (str *String) Len() int {
@@ -54,7 +57,7 @@ func (str *String) CanString() bool {
 
 // String 返回字节数组的深拷贝字符串
 func (str *String) String() string {
-	return string(str.content)
+	return string(str.Bytes())
 }
 
 // Bytes 返回字符串的字节切片, 但如果底层存储的是整数, 会把整数转化为字符串再转化为字节切片

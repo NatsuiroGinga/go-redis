@@ -17,7 +17,7 @@ func fileExists(filename string) bool {
 	return err == nil && !stat.IsDir()
 }
 
-// serverProperties defines global config properties
+// serverProperties 是服务器的配置
 type serverProperties struct {
 	Bind                string `cfg:"bind"`                   // 绑定的ip, 默认127.0.0.1
 	Port                int    `cfg:"port"`                   // 端口, 默认6379
@@ -28,7 +28,7 @@ type serverProperties struct {
 	Databases           int    `cfg:"databases"`              // 数据库量,  默认16
 	Cycle               int    `cfg:"cycle"`                  // 清理过期数据的周期, 单位是s, 默认1s
 	Buckets             int    `cfg:"buckets"`                // 放数据的桶的数量, 默认65536
-	ListMaxShardSize    int    `cfg:"list-max-shard-size"`    // quicklist中每一个分片所存储的数据最大容量, 默认8kb
+	ListMaxShardSize    int    `cfg:"list-max-shard-size"`    // quicklist中每一个分片所存储的数据最大容量, 默认512
 	SetMaxIntSetEntries int    `cfg:"set-max-intset-entries"` // intset中可以存储的最大元素个数, 默认为512
 	// cluster
 	Peers []string `cfg:"peers"` // 所有集群节点的地址
@@ -52,10 +52,11 @@ func init() {
 		AppendOnly:          false,
 		Cycle:               1,
 		Buckets:             1 << 16,
-		ListMaxShardSize:    8 << 10,
+		ListMaxShardSize:    1 << 9,
 		Databases:           1 << 4,
 		SetMaxIntSetEntries: 512,
 		Dev:                 true,
+		MaxClients:          -1,
 	}
 	// read config file to rewrite `Properties`
 	if fileExists(configFile) {

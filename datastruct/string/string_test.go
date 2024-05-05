@@ -15,7 +15,7 @@ func TestString_SetInt(t *testing.T) {
 	if s.CanInt() {
 		t.Logf(intOuputPattern, s.Int(), s.encoding)
 	}
-	s.SetInt(math.MaxInt8 + 1)
+	s.SetInt(256 + 10)
 	if s.CanInt() {
 		t.Logf(intOuputPattern, s.Int(), s.encoding)
 	}

@@ -28,6 +28,8 @@ func (reply *BulkReply) Bytes() []byte {
 	return utils.String2Bytes(fmt.Sprintf("$%d%s%s%s", len(reply.Arg), enum.CRLF, reply.Arg, enum.CRLF))
 }
 
+/**********************************************************************************************************************/
+
 // MultiBulkReply 用于表示回复数组
 type MultiBulkReply struct {
 	Args db.CmdLine // 表示数组中的元素
@@ -70,6 +72,8 @@ func NewMultiBulkReply(args db.CmdLine) *MultiBulkReply {
 	return &MultiBulkReply{args}
 }
 
+/**********************************************************************************************************************/
+
 // StatusReply 用于表示回复状态
 type StatusReply struct {
 	status string // 表示状态值
@@ -87,6 +91,8 @@ func (reply *StatusReply) Bytes() []byte {
 func NewStatusReply(status string) resp.Reply {
 	return &StatusReply{status}
 }
+
+/**********************************************************************************************************************/
 
 // IntReply 用于表示回复整数
 type IntReply struct {
@@ -112,6 +118,8 @@ func IsErrReply(reply resp.Reply) bool {
 	_, ok := reply.(resp.ErrorReply)
 	return ok
 }
+
+/**********************************************************************************************************************/
 
 // MultiRawReply store complex list structure, for example GeoPos command
 type MultiRawReply struct {

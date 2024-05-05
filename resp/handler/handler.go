@@ -26,6 +26,7 @@ type RespHandler struct {
 	activeConn sync.Map
 	db         db.Database
 	closing    atomic.Bool
+	connCount  atomic.Int32
 }
 
 func NewRespHandler() (handler *RespHandler) {
@@ -45,10 +46,15 @@ func NewRespHandler() (handler *RespHandler) {
 	return
 }
 
+func (rh *RespHandler) GetConnCount() int {
+	return int(rh.connCount.Load())
+}
+
 func (rh *RespHandler) closeClient(client *connection.RespConnection) {
 	_ = client.Close()
 	rh.db.AfterClientClose(client)
 	rh.activeConn.Delete(client)
+	rh.connCount.Add(-1)
 }
 
 // Handle handles the connection.
@@ -60,6 +66,7 @@ func (rh *RespHandler) Handle(_ context.Context, conn net.Conn) {
 	// create a new client
 	client := connection.NewRespConnection(conn)
 	rh.activeConn.Store(client, struct{}{})
+	rh.connCount.Add(1)
 	ch := parser.ParseStream(conn)
 	// receive payload
 	for payload := range ch {

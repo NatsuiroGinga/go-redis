@@ -46,7 +46,7 @@ func (d *DB) Exec(conn resp.Connection, cmd db.CmdLine) resp.Reply {
 	// transaction control commands and other commands which cannot execute within transaction
 	cmdName := strings.ToUpper(utils.Bytes2String(cmd[0]))
 
-	logger.Info("receive command:", utils.CmdLine2String(cmd))
+	logger.Debug("receive command:", utils.CmdLine2String(cmd))
 
 	switch cmdName {
 	case enum.TX_MULTI.String():

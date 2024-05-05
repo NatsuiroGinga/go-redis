@@ -19,7 +19,7 @@ import (
 // ConcurrentDict 并发安全的字典
 type ConcurrentDict struct {
 	buckets    []*shard    // 固定数量的shard存储数据
-	count      int32       // 字典中存储的key-value的数量
+	size       int32       // 字典中存储的key-value的数量
 	shardCount int         // shard的数量
 	h          hash.Hash32 // hash函数
 }
@@ -59,7 +59,7 @@ func (dict *ConcurrentDict) Set(key string, value any) (n int) {
 		return 0
 	}
 	// 3. 键值对的数量加1
-	atomic.AddInt32(&dict.count, 1)
+	atomic.AddInt32(&dict.size, 1)
 	// 4. 改变数值
 	sd.m[key] = value
 
@@ -81,7 +81,7 @@ func (dict *ConcurrentDict) SetWithLock(key string, value any) (n int) {
 		return 0
 	}
 	// 4. 键值对的数量加1
-	dict.count++
+	dict.size++
 	// 5. 改变数值
 	sd.m[key] = value
 
@@ -93,7 +93,7 @@ func (dict *ConcurrentDict) Len() (n int) {
 		logger.Fatal(enum.DICT_IS_NIL)
 	}
 	// 使用原子方法获取dict.count保证并发安全
-	return int(atomic.LoadInt32(&dict.count))
+	return int(atomic.LoadInt32(&dict.size))
 }
 
 func (dict *ConcurrentDict) PutIfAbsent(key string, value any) (n int) {
@@ -105,7 +105,7 @@ func (dict *ConcurrentDict) PutIfAbsent(key string, value any) (n int) {
 	if _, ok := sd.m[key]; ok {
 		return 0
 	}
-	atomic.AddInt32(&dict.count, 1)
+	atomic.AddInt32(&dict.size, 1)
 	sd.m[key] = value
 	return 1
 }
@@ -122,7 +122,7 @@ func (dict *ConcurrentDict) PutIfAbsentWithLock(key string, value any) (n int) {
 	if _, ok := sd.m[key]; ok {
 		return 0
 	}
-	dict.count++
+	dict.size++
 	sd.m[key] = value
 	return 1
 }
@@ -136,7 +136,7 @@ func (dict *ConcurrentDict) PutIfExist(key string, value any) (n int) {
 	if _, ok := sd.m[key]; !ok {
 		return 0
 	}
-	atomic.AddInt32(&dict.count, 1)
+	atomic.AddInt32(&dict.size, 1)
 	sd.m[key] = value
 	return 1
 }
@@ -153,7 +153,7 @@ func (dict *ConcurrentDict) PutIfExistWithLock(key string, value any) (n int) {
 	if _, ok := sd.m[key]; !ok {
 		return 0
 	}
-	dict.count++
+	dict.size++
 	sd.m[key] = value
 	return 1
 }
@@ -167,7 +167,7 @@ func (dict *ConcurrentDict) Remove(key string) (n int) {
 		return 0
 	}
 	delete(sd.m, key)
-	atomic.AddInt32(&dict.count, -1)
+	atomic.AddInt32(&dict.size, -1)
 	return 1
 }
 
@@ -185,7 +185,7 @@ func (dict *ConcurrentDict) RemoveWithLock(key string) (n int) {
 		return 0
 	}
 	delete(sd.m, key)
-	dict.count--
+	dict.size--
 	return 1
 }
 
@@ -349,15 +349,15 @@ func (dict *ConcurrentDict) hash(key string) uint32 {
 // NewConcurrentDict 通过给定的shard数量创建dict
 func NewConcurrentDict(shardCount int) *ConcurrentDict {
 	shardCount = computeCapacity(shardCount)
-	table := make([]*shard, shardCount)
+	buckets := make([]*shard, shardCount)
 	for i := 0; i < shardCount; i++ {
-		table[i] = &shard{
+		buckets[i] = &shard{
 			m: make(map[string]any),
 		}
 	}
 	dict := &ConcurrentDict{
-		count:      0,
-		buckets:    table,
+		size:       0,
+		buckets:    buckets,
 		shardCount: shardCount,
 		h:          fnv.New32(),
 	}
@@ -369,8 +369,7 @@ func (dict *ConcurrentDict) computeSlot(hashCode uint32) uint32 {
 	if dict == nil {
 		logger.Fatal(enum.DICT_IS_NIL)
 	}
-	tableSize := uint32(dict.shardCount)
-	return (tableSize - 1) & hashCode
+	return (uint32(dict.shardCount) - 1) & hashCode
 }
 
 // getShard 根据key获取一个shard
