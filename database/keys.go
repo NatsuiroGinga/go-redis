@@ -108,10 +108,8 @@ func execRename(d *DB, args db.Params) resp.Reply {
 	}
 	// 4. 将目标key和原始value放回数据库
 	d.putEntity(dst, entity)
-	// 5. 删除原始key
-	d.removes(src)
-	// 6. 如果原始key有ttl, 则将原始ttl设置到目标key
-	t, hasTTL := d.ttl.Get(src)
+	// 5. 如果原始key有ttl, 则将原始ttl设置到目标key
+	t, hasTTL := d.ttl.GetWithLock(src)
 	if hasTTL {
 		// 6.1 删除src和dst以及他们的ttl
 		d.persist(src)
@@ -119,6 +117,8 @@ func execRename(d *DB, args db.Params) resp.Reply {
 		expireTime := t.(time.Time)
 		d.expire(dst, expireTime)
 	}
+	// 6. 删除原始key
+	d.removes(src)
 	// 7. 添加一个命令到aof文件
 	d.append(utils.ToCmdLine2(enum.RENAME.String(), args...))
 
@@ -150,7 +150,7 @@ func execRenameNX(d *DB, args db.Params) resp.Reply {
 		return reply.NewNoSuchKeyErrReply()
 	}
 	// 5. 检查src是否有ttl
-	t, hasTTL := d.ttl.Get(src)
+	t, hasTTL := d.ttl.GetWithLock(src)
 	// 6. 删除src和dst的key和ttl
 	d.removes(src, dst)
 	// 7. 放入dst和entity
@@ -242,7 +242,7 @@ func execExpireTime(d *DB, args db.Params) resp.Reply {
 		return reply.NewIntReply(-2)
 	}
 	// 3. 取出key的ttl
-	t, exist := d.ttl.Get(key)
+	t, exist := d.ttl.GetWithLock(key)
 	if !exist {
 		return reply.NewIntReply(-1)
 	}
@@ -266,7 +266,7 @@ func execTTL(d *DB, args db.Params) resp.Reply {
 		return reply.NewIntReply(-2)
 	}
 	// 3. 检查key是否有ttl
-	t, hasTTL := d.ttl.Get(key)
+	t, hasTTL := d.ttl.GetWithLock(key)
 	if !hasTTL {
 		return reply.NewIntReply(1)
 	}
@@ -345,7 +345,7 @@ func execPExpireTime(d *DB, args db.Params) resp.Reply {
 		return reply.NewIntReply(-2)
 	}
 	// 3. 取出key的ttl
-	t, exist := d.ttl.Get(key)
+	t, exist := d.ttl.GetWithLock(key)
 	if !exist {
 		return reply.NewIntReply(-1)
 	}
@@ -369,7 +369,7 @@ func execPTTL(d *DB, args db.Params) resp.Reply {
 		return reply.NewIntReply(-2)
 	}
 	// 3. 检查key是否有ttl
-	t, hasTTL := d.ttl.Get(key)
+	t, hasTTL := d.ttl.GetWithLock(key)
 	if !hasTTL {
 		return reply.NewIntReply(1)
 	}
@@ -405,7 +405,7 @@ func execPersist(d *DB, args db.Params) resp.Reply {
 	if !exist {
 		return reply.NewIntReply(0)
 	}
-	_, isExist := d.ttl.Get(key)
+	_, isExist := d.ttl.GetWithLock(key)
 	if !isExist {
 		return reply.NewIntReply(0)
 	}
@@ -418,7 +418,7 @@ func execPersist(d *DB, args db.Params) resp.Reply {
 
 // toTTLCmd 判断数据是否有过期时间, 如果有则返回过期的命令
 func toTTLCmd(d *DB, key string) *reply.MultiBulkReply {
-	raw, exists := d.ttl.Get(key)
+	raw, exists := d.ttl.GetWithLock(key)
 	if !exists {
 		// has no TTL
 		return reply.NewMultiBulkReply(utils.ToCmdLine(enum.PERSIST.String(), key))
@@ -502,7 +502,7 @@ func init() {
 	registerCommand(enum.PEXPIRETIME, readFirstKey, execPExpireTime, nil)
 	registerCommand(enum.PTTL, readFirstKey, execPTTL, nil)
 	// cluster command
-	registerCommand(enum.DUMPKEY, writeFirstKey, execDumpKey, undoDel)
-	registerCommand(enum.RENAMEFROM, readFirstKey, execRenameFrom, nil)
-	registerCommand(enum.RENAMETO, writeFirstKey, execRenameTo, rollbackFirstKey)
+	registerCommand(enum.MULTI_DUMPKEY, writeFirstKey, execDumpKey, undoDel)
+	registerCommand(enum.MULTI_RENAMEFROM, readFirstKey, execRenameFrom, nil)
+	registerCommand(enum.MULTI_RENAMETO, writeFirstKey, execRenameTo, rollbackFirstKey)
 }

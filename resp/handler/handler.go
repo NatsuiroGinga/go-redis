@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"net"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -38,7 +39,7 @@ func NewRespHandler() (handler *RespHandler) {
 
 		handler.db = cluster_database.NewClusterDatabase()
 	} else {
-		logger.Info("start a standalone, self address:", config.Properties.Self)
+		logger.Info("start a standalone, self address:", config.Properties.Bind+":"+strconv.Itoa(config.Properties.Port))
 
 		handler.db = database2.NewStandaloneDatabase()
 	}

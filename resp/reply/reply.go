@@ -138,8 +138,8 @@ func (r *MultiRawReply) Bytes() []byte {
 	argLen := len(r.Replies)
 	var buf bytes.Buffer
 	buf.WriteString("*" + strconv.Itoa(argLen) + enum.CRLF)
-	for _, arg := range r.Replies {
-		buf.Write(arg.Bytes())
+	for _, re := range r.Replies {
+		buf.Write(re.Bytes())
 	}
 	return buf.Bytes()
 }

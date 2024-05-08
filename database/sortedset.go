@@ -108,7 +108,7 @@ func execZScore(d *DB, args db.Params) resp.Reply {
 //
 // 如果成员是有序集 key 的成员，返回 member 的排名。 如果成员不是有序集 key 的成员，返回 nil 。
 func execZRank(d *DB, args db.Params) resp.Reply {
-	return execGenericZRank(d, args, enum.ZREVRANK)
+	return execGenericZRank(d, args, enum.ZRANK)
 }
 
 // execZRevRank 命令返回有序集中成员的排名。其中有序集成员按分数值递减(从大到小)排序。
@@ -387,7 +387,7 @@ func execZRemRangeByRank(d *DB, args db.Params) resp.Reply {
 	}
 
 	// assert: start in [0, size - 1], stop in [start, size]
-	removed := sortedSet.RemoveByRank(start, stop)
+	removed := sortedSet.RemoveByRank(start, stop-1)
 	if removed > 0 {
 		d.append(utils.ToCmdLine2(enum.ZREMRANGEBYRANK.String(), args...))
 	}
@@ -502,7 +502,7 @@ func range0(d *DB, key string, start, stop int64, withScores, desc bool) resp.Re
 	if errReply != nil {
 		return errReply
 	}
-	if sortedSet == nil {
+	if sortedSet == nil || sortedSet.Length() == 0 {
 		return reply.NewEmptyMultiBulkReply()
 	}
 

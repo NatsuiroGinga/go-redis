@@ -11,9 +11,16 @@ import (
 	"go-redis/resp/connection"
 )
 
-var testNodeA = newTestNode()
+var testNodeA = newTestNodeA()
+var testNodeB = newTestNodeB()
 
-func newTestNode() *ClusterDatabase {
+func newTestNodeB() *ClusterDatabase {
+	config.SetupConfig("../node1.conf")
+	node := NewClusterDatabase()
+	return node
+}
+
+func newTestNodeA() *ClusterDatabase {
 	config.SetupConfig("../redis.conf")
 	node := NewClusterDatabase()
 	return node

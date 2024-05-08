@@ -8,9 +8,10 @@ import (
 	"go-redis/lib/utils"
 )
 
+// String 实现String基础类型
 type String struct {
-	encoding StrType
-	content  []byte
+	encoding StrType // 类型枚举, 包括STRING、INT_8、INT_16、INT_32和INT_64
+	content  []byte  // 存储字节数组
 }
 
 func (str *String) Append(val []byte) {
@@ -27,15 +28,16 @@ func (str *String) Len() int {
 	panic("unknown string type")
 }
 
+// Int 将String实例转化为int64的整数
 func (str *String) Int() int64 {
-	switch str.encoding {
-	case INT_8:
+	switch str.encoding { // 根据String实例的编码实现不同的逻辑
+	case INT_8: // int8直接转化即可
 		return int64(str.content[0])
-	case INT_16:
+	case INT_16: // int16需要取字节数组头两个字节转化
 		return int64(*(*int16)(unsafe.Pointer(&str.content[0])))
-	case INT_32:
+	case INT_32: // int32需要取字节数组的头4个字节转化
 		return int64(*(*int32)(unsafe.Pointer(&str.content[0])))
-	case INT_64:
+	case INT_64: // int64要取字节数组的头8个字节转化
 		return *(*int64)(unsafe.Pointer(&str.content[0]))
 	default:
 		panic("string can not be converted to int")
@@ -118,10 +120,13 @@ func NewString(val any) *String {
 	return s
 }
 
-// SetInt 根据val的值判断它在(int8, int16, int32, int64)中的哪一个的表示范围, 然后存储为对应类型的二进制
+// SetInt 根据val的值判断它在(int8, int16, int32, int64)中的哪一个的表示范围, 然后存储对应类型的二进制
 func (str *String) SetInt(val int64) {
+	// 1. 获取val的编码
 	encoding := getIntEncoding(val)
+	// 2. 设置实例的编码
 	str.encoding = encoding
+	// 3. 存储val的二进制
 	str.content = make([]byte, str.encoding)
 	*(*int64)(unsafe.Pointer(&str.content[0])) = val
 }
@@ -138,14 +143,19 @@ func (str *String) SetString(val string) {
 	str.encoding = STRING
 }
 
+// getIntEncoding 获取val的实际编码, 可能为int8, int16, int32, int64
 func getIntEncoding(val int64) StrType {
+	// 1. 初始化为int8
 	encoding := INT_8
+	// 2. 判定是否处于int16的范围内
 	if val > 0x7F || val < -0x80 {
 		encoding = INT_16
 	}
+	// 3. 判定是否处于int32的范围内
 	if val > 0x7FFF || val < -0x8000 {
 		encoding = INT_32
 	}
+	// 4. 判定是否处于int64的范围内
 	if val > 0x7FFFFFFF || val < -0x80000000 {
 		encoding = INT_64
 	}

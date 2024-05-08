@@ -4,6 +4,7 @@ import (
 	"go-redis/enum"
 	"go-redis/interface/db"
 	"go-redis/interface/resp"
+	"go-redis/lib/logger"
 	"go-redis/lib/utils"
 	"go-redis/resp/reply"
 )
@@ -51,6 +52,7 @@ func init() {
 	for _, cmd := range defaultCmds {
 		router[cmd] = defaultFunc
 	}
+	registerRouter(enum.MULTI_KEYS, genPenetratingExecutor(enum.KEYS.String()))
 }
 
 var defaultCmds = []string{
@@ -128,4 +130,20 @@ var defaultCmds = []string{
 	enum.ZREM.String(),
 	enum.ZREMRANGEBYSCORE.String(),
 	enum.ZREMRANGEBYRANK.String(),
+}
+
+// genPenetratingExecutor generates an executor that can reach directly to the database layer
+func genPenetratingExecutor(realCmd string) execFunc {
+	return func(cluster *ClusterDatabase, c resp.Connection, cmdLine db.CmdLine) resp.Reply {
+		cmd := modifyCmd(cmdLine, realCmd)
+		logger.Debug("cmd:", utils.CmdLine2String(cmd))
+		return cluster.db.Exec(c, cmd)
+	}
+}
+
+func modifyCmd(cmdLine db.CmdLine, newCmd string) db.CmdLine {
+	var cmdLine2 db.CmdLine
+	cmdLine2 = append(cmdLine2, cmdLine...)
+	cmdLine2[0] = []byte(newCmd)
+	return cmdLine2
 }

@@ -46,7 +46,7 @@ func NewHandler(database db.Database) (*Handler, error) {
 
 // Append 添加一个命令到aof文件
 func (handler *Handler) Append(dbIndex int, cmd db.CmdLine) {
-	if !config.Properties.AppendOnly || handler.aofChan == nil {
+	if !config.Properties.AppendOnly || handler == nil || handler.aofChan == nil {
 		return
 	}
 

@@ -27,11 +27,11 @@ func registerPrepareFunc(cmdName string, fn execFunc) {
 
 // Transaction stores state and data for a try-commit-catch distributed transaction
 type Transaction struct {
-	id              string     // transaction id
-	cmdLine         db.CmdLine // cmd cmdLine
-	ClusterDatabase *ClusterDatabase
-	conn            resp.Connection
-	dbIndex         int
+	id      string     // transaction id
+	cmdLine db.CmdLine // cmd cmdLine
+	cluster *ClusterDatabase
+	conn    resp.Connection
+	dbIndex int
 
 	writeKeys  []string
 	readKeys   []string
@@ -59,13 +59,13 @@ func genTaskKey(txID string) string {
 // NewTransaction creates a try-commit-catch distributed transaction
 func NewTransaction(cluster *ClusterDatabase, conn resp.Connection, id string, cmdLine db.CmdLine) *Transaction {
 	return &Transaction{
-		id:              id,
-		cmdLine:         cmdLine,
-		ClusterDatabase: cluster,
-		conn:            conn,
-		dbIndex:         conn.GetDBIndex(),
-		status:          createdStatus,
-		mu:              new(sync.Mutex),
+		id:      id,
+		cmdLine: cmdLine,
+		cluster: cluster,
+		conn:    conn,
+		dbIndex: conn.GetDBIndex(),
+		status:  createdStatus,
+		mu:      new(sync.Mutex),
 	}
 }
 
@@ -73,14 +73,14 @@ func NewTransaction(cluster *ClusterDatabase, conn resp.Connection, id string, c
 // invoker should hold tx.mu
 func (tx *Transaction) lockKeys() {
 	if !tx.keysLocked {
-		tx.ClusterDatabase.db.RWLocks(tx.dbIndex, tx.writeKeys, tx.readKeys)
+		tx.cluster.db.RWLocks(tx.dbIndex, tx.writeKeys, tx.readKeys)
 		tx.keysLocked = true
 	}
 }
 
 func (tx *Transaction) unLockKeys() {
 	if tx.keysLocked {
-		tx.ClusterDatabase.db.RWUnLocks(tx.dbIndex, tx.writeKeys, tx.readKeys)
+		tx.cluster.db.RWUnLocks(tx.dbIndex, tx.writeKeys, tx.readKeys)
 		tx.keysLocked = false
 	}
 }
@@ -95,7 +95,7 @@ func (tx *Transaction) prepare() error {
 	tx.lockKeys()
 
 	// build undoLog
-	tx.undoLog = tx.ClusterDatabase.db.GetUndoLogs(tx.dbIndex, tx.cmdLine)
+	tx.undoLog = tx.cluster.db.GetUndoLogs(tx.dbIndex, tx.cmdLine)
 	tx.status = preparedStatus
 	taskKey := genTaskKey(tx.id)
 	timewheel.Delay(maxLockTime, taskKey, func() {
@@ -107,6 +107,31 @@ func (tx *Transaction) prepare() error {
 		}
 	})
 	return nil
+}
+
+func (tx *Transaction) commit() (result resp.Reply, err resp.ErrorReply) {
+	tx.mu.Lock()
+	defer tx.mu.Unlock()
+
+	result = tx.cluster.db.ExecWithoutLock(tx.conn, tx.cmdLine)
+
+	if reply.IsErrReply(result) {
+		// failed
+		err2 := tx.rollbackWithLock()
+		return nil, reply.NewErrReply(fmt.Sprintf("occurs when rollback: %v, origin err: %s", err2, result))
+	}
+	// after committed
+	tx.unLockKeys()
+	tx.status = committedStatus
+	// clean finished transaction
+	// do not clean immediately, in case rollback
+	timewheel.Delay(waitBeforeCleanTx, "", func() {
+		tx.cluster.txMutex.Lock()
+		tx.cluster.transactions.Remove(tx.id)
+		tx.cluster.txMutex.Unlock()
+	})
+
+	return result, nil
 }
 
 func (tx *Transaction) rollbackWithLock() error {
@@ -121,7 +146,7 @@ func (tx *Transaction) rollbackWithLock() error {
 	// 执行本地的undo log
 	tx.lockKeys()
 	for _, cmdLine := range tx.undoLog {
-		tx.ClusterDatabase.db.ExecWithoutLock(tx.conn, cmdLine)
+		tx.cluster.db.ExecWithoutLock(tx.conn, cmdLine)
 	}
 	tx.unLockKeys()
 	tx.status = rolledBackStatus
@@ -184,7 +209,7 @@ func execRollback(cluster *ClusterDatabase, _ resp.Connection, cmdLine db.CmdLin
 }
 
 // execCommit commits local transaction as a worker when receive execCommit command from coordinator
-func execCommit(cluster *ClusterDatabase, conn resp.Connection, cmdLine db.CmdLine) resp.Reply {
+func execCommit(cluster *ClusterDatabase, _ resp.Connection, cmdLine db.CmdLine) resp.Reply {
 	if len(cmdLine) != 2 {
 		return reply.NewArgNumErrReply(enum.TCC_COMMIT.String())
 	}
@@ -197,7 +222,7 @@ func execCommit(cluster *ClusterDatabase, conn resp.Connection, cmdLine db.CmdLi
 	}
 	tx, _ := raw.(*Transaction)
 
-	tx.mu.Lock()
+	/*tx.mu.Lock()
 	defer tx.mu.Unlock()
 
 	result := cluster.db.ExecWithoutLock(conn, tx.cmdLine)
@@ -216,7 +241,11 @@ func execCommit(cluster *ClusterDatabase, conn resp.Connection, cmdLine db.CmdLi
 		cluster.txMutex.Lock()
 		cluster.transactions.Remove(tx.id)
 		cluster.txMutex.Unlock()
-	})
+	})*/
+	result, err := tx.commit()
+	if err != nil {
+		return err
+	}
 	return result
 }
 
