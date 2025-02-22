@@ -114,14 +114,20 @@ func (tw *TimeWheel) tickHandler() {
 }
 
 func (tw *TimeWheel) scanAndRunTask(l *list.List) {
+	// 遍历当前槽的所有任务
 	for e := l.Front(); e != nil; {
+		// 1. 获取任务
 		task := e.Value.(*task)
+		// 2. 如果任务的圈数大于0, 说明任务还没到时间
 		if task.circle > 0 {
+			// 2.1 圈数减1
 			task.circle--
+			// 2.2 移动到下一个任务
 			e = e.Next()
 			continue
 		}
-
+		// 3. 任务的圈数为0, 说明任务到时间了
+        	// 3.1 异步执行任务
 		go func() {
 			defer func() {
 				if err := recover(); err != nil {
@@ -131,6 +137,7 @@ func (tw *TimeWheel) scanAndRunTask(l *list.List) {
 			job := task.job
 			job()
 		}()
+		// 3.2 删除任务
 		next := e.Next()
 		l.Remove(e)
 		if task.key != "" {
