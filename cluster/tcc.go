@@ -160,7 +160,7 @@ func execPrepare(cluster *ClusterDatabase, conn resp.Connection, cmdLine db.CmdL
 	}
 	// 1. 取出参数
 	txID := utils.Bytes2String(cmdLine[1])
-	cmdName := strings.ToUpper(string(cmdLine[2]))
+	cmdName := strings.ToUpper(utils.Bytes2String(cmdLine[2]))
 	tx := NewTransaction(cluster, conn, txID, cmdLine[2:])
 	// 2. 设置事务id
 	cluster.txMutex.Lock()

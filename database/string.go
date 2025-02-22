@@ -214,6 +214,23 @@ func execMSet(d *DB, args db.Params) resp.Reply {
 	return reply.NewOKReply()
 }
 
+func execMGet(d *DB, args db.Params) resp.Reply {
+	// 1. 校验参数
+	if len(args)%2 != 0 {
+		return reply.NewSyntaxErrReply()
+	}
+	// 2.取出键
+	results := make([][]byte, 0, len(args))
+	for _, keyBytes := range args {
+		s, err := d.getString(utils.Bytes2String(keyBytes))
+		if err != nil {
+			return err
+		}
+		results = append(results, s.Bytes())
+	}
+	return reply.NewMultiBulkReply(results)
+}
+
 func init() {
 	registerCommand(enum.GET, readFirstKey, execGet, nil)
 	registerCommand(enum.SET, writeFirstKey, execSet, rollbackFirstKey)
@@ -223,6 +240,7 @@ func init() {
 	registerCommand(enum.STRLEN, readFirstKey, execStrLen, nil)
 	registerCommand(enum.INCR, writeFirstKey, execIncr, rollbackFirstKey)
 	registerCommand(enum.DECR, writeFirstKey, execDecr, rollbackFirstKey)
+	registerCommand(enum.MGET, readAllKeys, execMGet, nil)
 }
 
 func undoMSet(d *DB, args db.Params) []db.CmdLine {

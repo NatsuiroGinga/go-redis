@@ -94,18 +94,12 @@ func execKeys(cluster *ClusterDatabase, conn resp.Connection, args db.CmdLine) r
 			break
 		}
 		logger.Debug("reply:", string(r.Bytes()))
-		// 3.2 处理多行回复
-		/*	if multiReply, ok := r.(*reply.MultiBulkReply); !ok {
-				keys = append(keys, utils.Bytes2String(r.(*reply.BulkReply).Arg))
-				break
-			} else {
-				keys = append(keys, utils.CmdLine2Strings(multiReply.Args)...)
-			}*/
+		// 3.2 处理一条回复
 		switch re := r.(type) {
 		case *reply.MultiBulkReply:
 			keys = append(keys, utils.CmdLine2Strings(re.Args)...)
 		case *reply.BulkReply:
-			keys = append(keys, string(re.Arg))
+			keys = append(keys, utils.Bytes2String(re.Arg))
 		}
 	}
 	if errReply != nil {

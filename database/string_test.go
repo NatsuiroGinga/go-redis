@@ -29,3 +29,16 @@ func TestGet(t *testing.T) {
 	reply = execGet(d, utils.ToCmdLine("jack"))
 	t.Log(string(reply.Bytes()))
 }
+
+func TestMGET(t *testing.T) {
+	d := newDB(0)
+	args := slices.Concat(
+		utils.ToCmdLine("name", "jack"),
+		utils.ToCmdLine("age", "18"),
+	)
+	execMSet(d, args)
+
+	args = utils.ToCmdLine("name", "nil")
+	r := execMGet(d, args)
+	t.Log(string(r.Bytes()))
+}

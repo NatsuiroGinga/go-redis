@@ -17,7 +17,7 @@ func fileExists(filename string) bool {
 	return err == nil && !stat.IsDir()
 }
 
-// serverProperties 是服务器的配置
+// serverProperties 是服务器的配置, 可以通过配置文件设置
 type serverProperties struct {
 	Bind                string `cfg:"bind"`                   // 绑定的ip, 默认127.0.0.1
 	Port                int    `cfg:"port"`                   // 端口, 默认6379
@@ -25,7 +25,7 @@ type serverProperties struct {
 	AppendFilename      string `cfg:"append-filename"`        // aof文件名
 	MaxClients          int    `cfg:"max-clients"`            // 最大客户端数
 	RequirePass         string `cfg:"require-pass"`           // 是否需要密码
-	Databases           int    `cfg:"databases"`              // 数据库量,  默认16
+	Databases           int    `cfg:"databases"`              // 数据库量, 默认16
 	Cycle               int    `cfg:"cycle"`                  // 清理过期数据的周期, 单位是s, 默认1s
 	Buckets             int    `cfg:"buckets"`                // 放数据的桶的数量, 默认65536
 	ListMaxShardSize    int    `cfg:"list-max-shard-size"`    // quicklist中每一个分片所存储的数据最大容量, 默认512

@@ -47,7 +47,7 @@ func (d *DB) Exec(conn resp.Connection, cmd db.CmdLine) resp.Reply {
 	cmdName := strings.ToUpper(utils.Bytes2String(cmd[0]))
 
 	if cmdName != enum.PING.Name() {
-		logger.Debug("receive command:", utils.CmdLine2String(cmd))
+		logger.Debug("Exec command:", utils.CmdLine2String(cmd))
 	}
 
 	switch cmdName {
@@ -264,6 +264,7 @@ func (d *DB) exec(cmd db.CmdLine) resp.Reply {
 	if !ValidateArity(com.arity, cmd) {
 		return reply.NewArgNumErrReply(instruction)
 	}
+	logger.Debug("exec command:", utils.CmdLine2String(cmd))
 	return com.executor(d, cmd[1:])
 }
 

@@ -3,6 +3,7 @@ package cluster_database
 import (
 	"strconv"
 
+	"go-redis/database"
 	"go-redis/enum"
 	"go-redis/interface/db"
 	"go-redis/interface/resp"
@@ -71,7 +72,7 @@ func execRename(clusterDatabase *ClusterDatabase, connection resp.Connection, ar
 // prepareRenameFrom 检查准备改名的旧key是否存在, 如果不存在返回错误
 func prepareRenameFrom(cluster *ClusterDatabase, conn resp.Connection, cmdLine db.CmdLine) resp.Reply {
 	// 1. 参数校验
-	if len(cmdLine) != enum.MULTI_RENAMEFROM.Arity() {
+	if !database.ValidateArity(enum.MULTI_RENAMEFROM.Arity(), cmdLine) {
 		return reply.NewArgNumErrReply(enum.MULTI_RENAMEFROM.String())
 	}
 	// 2. 检查旧key是否存在

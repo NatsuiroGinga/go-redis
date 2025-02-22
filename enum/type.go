@@ -5,7 +5,7 @@ import "fmt"
 var types = [...]string{
 	1: "string",
 	2: "list",
-	3: "zset",
+	3: "sortedset",
 	4: "hash",
 	5: "set",
 }

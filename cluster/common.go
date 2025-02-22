@@ -1,12 +1,15 @@
 package cluster_database
 
-import "go-redis/interface/db"
+import (
+	"go-redis/interface/db"
+	"go-redis/lib/utils"
+)
 
 func makeArgs(cmd string, args ...string) [][]byte {
 	result := make([][]byte, len(args)+1)
-	result[0] = []byte(cmd)
+	result[0] = utils.String2Bytes(cmd)
 	for i, arg := range args {
-		result[i+1] = []byte(arg)
+		result[i+1] = utils.String2Bytes(arg)
 	}
 	return result
 }

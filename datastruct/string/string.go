@@ -62,8 +62,11 @@ func (str *String) String() string {
 	return string(str.Bytes())
 }
 
-// Bytes 返回字符串的字节切片, 但如果底层存储的是整数, 会把整数转化为字符串再转化为字节切片
+// Bytes 返回字符串的字节切片(浅拷贝), 但如果底层存储的是整数, 会把整数转化为字符串再转化为字节切片
 func (str *String) Bytes() []byte {
+	if str == nil {
+		return nil
+	}
 	switch str.encoding {
 	case STRING:
 		return str.content

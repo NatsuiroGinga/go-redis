@@ -38,12 +38,6 @@ func (set *IntSet) Add(val any) int {
 
 	// 2. 如果需要，升级现有元素
 	if newEncoding > set.encoding {
-		/*newContents := make([]byte, set.Len()*int(newEncoding))
-		for i := int32(0); i < set.length; i++ {
-			*(*int64)(unsafe.Pointer(&newContents[i*int32(newEncoding)])) = set.get(int(i))
-		}
-		set.contents = newContents
-		set.encoding = newEncoding*/
 		return set.upgradeEncodingAndAppend(newEncoding, value)
 	}
 	// 3. 找到元素所在起始位置
