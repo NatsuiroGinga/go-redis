@@ -56,7 +56,9 @@ func (nodeMap *NodeMap) Pick(key string) string {
 		return ""
 	}
 
+	// calculate hash of key
 	hash := nodeMap.hashFunc(utils.String2Bytes(key))
+	// find first nodeHash which >= hash
 	idx := utils.Search(nodeMap.hashes, hash)
 
 	return nodeMap.mp[nodeMap.hashes[idx%len(nodeMap.hashes)]]

@@ -8,6 +8,7 @@ import (
 	"sync"
 	"syscall"
 
+	"go-redis/config"
 	"go-redis/interface/tcp"
 	"go-redis/lib/logger"
 )
@@ -78,6 +79,12 @@ func listenAndServe(listener net.Listener, handler tcp.Handler, closeChan <-chan
 		if err != nil {
 			logger.Error(err)
 			break
+		}
+
+		// check max clients limit
+		if config.Properties.MaxClients != -1 && handler.GetConnCount() >= config.Properties.MaxClients {
+			logger.Error("exceed max clients limit", config.Properties.MaxClients)
+			continue
 		}
 
 		go logger.Info("accept a new connection:", conn.RemoteAddr())

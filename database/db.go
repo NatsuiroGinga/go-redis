@@ -46,7 +46,9 @@ func (d *DB) Exec(conn resp.Connection, cmd db.CmdLine) resp.Reply {
 	// transaction control commands and other commands which cannot execute within transaction
 	cmdName := strings.ToUpper(utils.Bytes2String(cmd[0]))
 
-	logger.Info("receive command:", utils.CmdLine2String(cmd))
+	if cmdName != enum.PING.Name() {
+		logger.Debug("Exec command:", utils.CmdLine2String(cmd))
+	}
 
 	switch cmdName {
 	case enum.TX_MULTI.String():
@@ -262,6 +264,7 @@ func (d *DB) exec(cmd db.CmdLine) resp.Reply {
 	if !ValidateArity(com.arity, cmd) {
 		return reply.NewArgNumErrReply(instruction)
 	}
+	logger.Debug("exec command:", utils.CmdLine2String(cmd))
 	return com.executor(d, cmd[1:])
 }
 
@@ -270,12 +273,12 @@ func (d *DB) exec(cmd db.CmdLine) resp.Reply {
 包括: get, set, remove, putIfExists, putIfAbsent
 */
 
-// Remove 删除一个key以及它的ttl
+// Remove 删除一个key以及它的ttl, 并发不安全
 func (d *DB) Remove(key string) {
 	// 1. 删除数据
 	d.data.Remove(key)
 	// 2. 删除过期
-	d.ttl.Remove(key)
+	d.ttl.RemoveWithLock(key)
 	// 3. 取消执行过期删除的任务
 	taskKey := getExpireTaskKey(key)
 	timewheel.Cancel(taskKey)
@@ -380,11 +383,11 @@ func (d *DB) persist(key string) {
 	timewheel.Cancel(taskKey)
 }
 
-// expireIfNeeded 检查key是否过期, 如果过期了就删除, 并发安全
+// expireIfNeeded 检查key是否过期, 如果过期了就删除, 并发不安全
 //
 // 如果key过期了就删除然后返回true, key不存在、没有过期时间 或者 有过期时间但是没过期 返回false
 func (d *DB) expireIfNeeded(key string) bool {
-	t, exist := d.ttl.GetWithLock(key)
+	t, exist := d.ttl.Get(key)
 	if !exist {
 		return false
 	}
@@ -441,7 +444,7 @@ func (d *DB) ForEach(cb func(key string, data *db.DataEntity, expiration *time.T
 	d.data.ForEach(func(key string, raw interface{}) bool {
 		entity, _ := raw.(*db.DataEntity)
 		var expiration *time.Time
-		rawExpireTime, ok := d.ttl.Get(key)
+		rawExpireTime, ok := d.ttl.GetWithLock(key)
 		if ok {
 			expireTime, _ := rawExpireTime.(time.Time)
 			expiration = &expireTime

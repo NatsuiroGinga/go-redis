@@ -19,24 +19,24 @@ type Element struct {
 
 // level 是一个节点的一层索引
 type level struct {
-	forward *skiplistNode // 指向下一个score更大的节点的指针
-	span    int64         // 索引跨度
+	next *skiplistNode // 指向下一个score更大的节点的指针
+	span int64         // 索引跨度
 }
 
 // skiplistNode 是跳表中的一个节点
 type skiplistNode struct {
-	Element                // 节点实际存储的值
-	backward *skiplistNode // 前一个节点的指针
-	level    []*level      // 多级索引数组, level[0]是原始数据
+	Element               // 节点实际存储的值
+	prev    *skiplistNode // 前一个节点的指针
+	level   []*level      // 多级索引数组, level[0]是原始数据
 }
 
-func newSkiplistNode(ele string, score float64, l int) (node *skiplistNode) {
+func newSkiplistNode(ele string, score float64, lv int) (node *skiplistNode) {
 	node = &skiplistNode{
 		Element: Element{
 			ele,
 			score,
 		},
-		level: make([]*level, l),
+		level: make([]*level, lv),
 	}
 	for i := range node.level {
 		node.level[i] = new(level)
@@ -105,7 +105,7 @@ func (list *skiplist) insert(ele string, score float64) *skiplistNode {
 			// 下一个节点不为空并且下一个节点的Score值等于目标score值，但是下一个节点的ele小于目标ele，继续探寻下一个节点
 			for canForward(node.level[i], ele, score) {
 				rank[i] += node.level[i].span
-				node = node.level[i].forward
+				node = node.level[i].next
 			}
 		}
 		update[i] = node
@@ -130,9 +130,9 @@ func (list *skiplist) insert(ele string, score float64) *skiplistNode {
 	// 7. 插入每一层索引
 	for i := 0; i < lv; i++ {
 		// 7.1 新节点的后继是要修改的节点的后继
-		node.level[i].forward = update[i].level[i].forward
+		node.level[i].next = update[i].level[i].next
 		// 7.2 要修改的节点的后继是新节点, 完成插入
-		update[i].level[i].forward = node
+		update[i].level[i].next = node
 
 		// 7.3 更新已经修改的节点的索引跨度
 		// rank[0]是最底层新节点之前的所有节点span总和
@@ -151,10 +151,10 @@ func (list *skiplist) insert(ele string, score float64) *skiplistNode {
 
 	// 9. 更新每层索引中被修改的节点的backward
 	// 9.1 检查node是否为第一个节点，如果是就设置backward=nil
-	node.backward = utils.If(update[0] == list.header, nil, update[0])
-	// 9.2 检查node是否为最后一个节点
-	if node.level[0].forward != nil {
-		node.level[0].forward.backward = node
+	node.prev = utils.If(update[0] == list.header, nil, update[0])
+	// 9.2 检查node是否为最后一个节点, 如果是就设置tail指向node
+	if node.level[0].next != nil {
+		node.level[0].next.prev = node
 	} else {
 		list.tail = node
 	}
@@ -173,23 +173,23 @@ func (list *skiplist) deleteNode(node *skiplistNode, update []*skiplistNode) {
 		// 1.1 如果update[i].level[i]的后继是node, 则进行删除操作, 同时更新span
 		// 删除update[i].level[i]之后的节点会使update[i].level[i]指向的下一个节点有所变化
 		// 删除的节点越多，距离下一个节点越远，所以加上 node.level[i].span 再减 1
-		if update[i].level[i].forward == node {
+		if update[i].level[i].next == node {
 			update[i].level[i].span += node.level[i].span - 1
-			update[i].level[i].forward = node.level[i].forward
+			update[i].level[i].next = node.level[i].next
 		} else { // 1.2 update[i].level[i]的后继不是node, 但删除node后少了一个节点, 所以span--
 			update[i].level[i].span--
 		}
 	}
 	// 2. 更新node的backward
 	// 2.1 如果node.level[0]的forward不为nil, 更新backward
-	if node.level[0].forward != nil {
-		node.level[0].forward.backward = node.backward
+	if node.level[0].next != nil {
+		node.level[0].next.prev = node.prev
 	} else { // 2.2 如果node.level[0]的forward为nil说明它是最后一个节点
-		list.tail = node.backward
+		list.tail = node.prev
 	}
 	// 3. 在删除的过程中有可能会删除某一层的所有节点导致那一层变为空
 	// 需要修改list.level
-	for list.level > 1 && list.header.level[list.level-1].forward == nil {
+	for list.level > 1 && list.header.level[list.level-1].next == nil {
 		list.level--
 	}
 	// 4. 表中节点个数减1
@@ -205,12 +205,12 @@ func (list *skiplist) delete(ele string, score float64) bool {
 	node := list.header
 	for i := list.level - 1; i >= 0; i-- {
 		for canForward(node.level[i], ele, score) {
-			node = node.level[i].forward
+			node = node.level[i].next
 		}
 		update[i] = node
 	}
 	// 2. 因为有的元素的score值会重复，所以需要根据score和ele找到正确元素对象
-	node = node.level[0].forward
+	node = node.level[0].next
 	if node != nil && score == node.Score && node.Ele == ele {
 		list.deleteNode(node, update)
 		return true
@@ -228,12 +228,12 @@ func (list *skiplist) getRank(ele string, score float64) int64 {
 	for i := list.level - 1; i >= 0; i-- {
 		for canForward(node.level[i], ele, score) {
 			rank += node.level[i].span
-			node = node.level[i].forward
+			node = node.level[i].next
 		}
 		// 1.1 因为找到的是目标节点的之前一个节点, 所以要再进行一组操作
-		if node.level[i].forward != nil {
+		if node.level[i].next != nil {
 			rank += node.level[i].span
-			node = node.level[i].forward
+			node = node.level[i].next
 		}
 		// 1.2 x可能指向header, 所以要检查
 		if node.Score == score && node.Ele == ele {
@@ -254,9 +254,9 @@ func (list *skiplist) getElementByRank(rank int64) *skiplistNode {
 	node := list.header
 	for i := list.level - 1; i >= 0; i-- {
 		// 如果rank为0, 当curRank = 0, node.level[i].span = 0时会返回header
-		for node.level[i].forward != nil && (curRank+node.level[i].span) <= rank {
+		for node.level[i].next != nil && (curRank+node.level[i].span) <= rank {
 			curRank += node.level[i].span
-			node = node.level[i].forward
+			node = node.level[i].next
 		}
 		if curRank == rank {
 			return node
@@ -275,19 +275,19 @@ func (list *skiplist) updateScore(ele string, score, newScore float64) *skiplist
 	node := list.header
 	for i := list.level - 1; i >= 0; i-- {
 		for canForward(node.level[i], ele, score) {
-			node = node.level[i].forward
+			node = node.level[i].next
 		}
 		update[i] = node
 	}
-	node = node.level[0].forward
+	node = node.level[0].next
 	// 1. 如果没有匹配到节点则返回nil
 	if node == nil || node.Ele != ele || node.Score != score {
 		return nil
 	}
 	// 2. 判断修改完score后位置是否发生改变
 	// 2.1 没有改变直接修改
-	if (node.backward == nil || node.backward.Score < newScore) &&
-		(node.level[0].forward == nil || node.level[0].forward.Score > newScore) {
+	if (node.prev == nil || node.prev.Score < newScore) &&
+		(node.level[0].next == nil || node.level[0].next.Score > newScore) {
 		node.Score = newScore
 		return node
 	}
@@ -313,7 +313,7 @@ func (list *skiplist) isValidRange(min, max Border) bool {
 		return false
 	}
 	// 3. 判断max小于第一个节点
-	node = list.header.level[0].forward
+	node = list.header.level[0].next
 	if node == nil || !max.greater(&node.Element) {
 		return false
 	}
@@ -329,12 +329,12 @@ func (list *skiplist) getFirstInRange(min, max Border) *skiplistNode {
 	// 2. 找到范围内第一个元素的前一个元素
 	node := list.header
 	for i := list.level - 1; i >= 0; i-- {
-		for node.level[i].forward != nil && !min.less(&node.level[i].forward.Element) {
-			node = node.level[i].forward
+		for node.level[i].next != nil && !min.less(&node.level[i].next.Element) {
+			node = node.level[i].next
 		}
 	}
 	// 3. 向后移动获得结果
-	node = node.level[0].forward
+	node = node.level[0].next
 	// 4. 判断结果合法性
 	if !max.greater(&node.Element) {
 		return nil
@@ -351,8 +351,8 @@ func (list *skiplist) getLastInRange(min, max Border) *skiplistNode {
 	// 2. 找到范围内的最后一个元素
 	node := list.header
 	for i := list.level - 1; i >= 0; i-- {
-		for node.level[i].forward != nil && max.greater(&node.level[i].forward.Element) {
-			node = node.level[i].forward
+		for node.level[i].next != nil && max.greater(&node.level[i].next.Element) {
+			node = node.level[i].next
 		}
 	}
 	// 3. 检查结果合法性
@@ -376,14 +376,14 @@ func (list *skiplist) deleteRange(min, max Border, limit int) (removed []*Elemen
 	node := list.header
 	// 1. 查找范围内所有元素, 记录它们的前一个节点用于删除
 	for i := list.level - 1; i >= 0; i-- {
-		for node.level[i].forward != nil && !min.less(&node.level[i].forward.Element) {
-			node = node.level[i].forward
+		for node.level[i].next != nil && !min.less(&node.level[i].next.Element) {
+			node = node.level[i].next
 		}
 		update[i] = node
 	}
 
 	// 2. node向后移动获得范围内的第一个元素
-	node = node.level[0].forward
+	node = node.level[0].next
 
 	// 3. 删除范围内的所有元素
 	for node != nil {
@@ -391,7 +391,7 @@ func (list *skiplist) deleteRange(min, max Border, limit int) (removed []*Elemen
 		if !max.greater(&node.Element) {
 			break
 		}
-		next := node.level[0].forward
+		next := node.level[0].next
 		removedElement := node.Element
 		removed = append(removed, &removedElement)
 		list.deleteNode(node, update)
@@ -417,19 +417,19 @@ func (list *skiplist) deleteRangeByRank(start, stop int64) (removed []*Element) 
 	// 1. 更新update数组
 	node := list.header
 	for i := list.level - 1; i >= 0; i-- {
-		for node.level[i].forward != nil && (rank+node.level[i].span) < start {
+		for node.level[i].next != nil && (rank+node.level[i].span) < start {
 			rank += node.level[i].span
-			node = node.level[i].forward
+			node = node.level[i].next
 		}
 		update[i] = node
 	}
 
 	rank++
-	node = node.level[0].forward
+	node = node.level[0].next
 
 	// 2. 删除
 	for node != nil && rank <= stop {
-		next := node.level[0].forward
+		next := node.level[0].next
 		removedElement := node.Element
 		removed = append(removed, &removedElement)
 		list.deleteNode(node, update)
@@ -447,7 +447,7 @@ func (list *skiplist) deleteRangeByRank(start, stop int64) (removed []*Element) 
 //
 // 能进行返回true, 否则返回false
 func canForward(l *level, ele string, score float64) bool {
-	return l.forward != nil &&
-		(l.forward.Score < score ||
-			(l.forward.Score == score && l.forward.Ele < ele))
+	return l.next != nil &&
+		(l.next.Score < score ||
+			(l.next.Score == score && l.next.Ele < ele))
 }

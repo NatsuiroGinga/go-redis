@@ -12,6 +12,8 @@ import (
 )
 
 // computeInterval 根据start和stop计算合法区间, 左闭右闭
+//
+// # 注意: 会把stop + 1
 func computeInterval[T utils.Signed](size T, start, stop *T) error {
 	asserts.Assert(size > 0)
 	// 1. 计算start

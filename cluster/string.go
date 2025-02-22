@@ -6,10 +6,11 @@ import (
 	"go-redis/enum"
 	"go-redis/interface/db"
 	"go-redis/interface/resp"
+	"go-redis/lib/utils"
 	"go-redis/resp/reply"
 )
 
-// execMSet atomically sets multi key-value in cluster, writeKeys can be distributed on any node
+// execMSet 在多个节点中设置多个key-value, 会使用分布式事务确保数据一致性
 func execMSet(cluster *ClusterDatabase, conn resp.Connection, cmdLine db.CmdLine) resp.Reply {
 	// 1. 取出参数
 	argCount := len(cmdLine) - 1
@@ -20,8 +21,8 @@ func execMSet(cluster *ClusterDatabase, conn resp.Connection, cmdLine db.CmdLine
 	keys := make([]string, size)
 	valueMap := make(map[string]string)
 	for i := 0; i < size; i++ {
-		keys[i] = string(cmdLine[2*i+1])
-		valueMap[keys[i]] = string(cmdLine[2*i+2])
+		keys[i] = utils.Bytes2String(cmdLine[2*i+1])
+		valueMap[keys[i]] = utils.Bytes2String(cmdLine[2*i+2])
 	}
 	// 2. 创建node : keys的索引
 	groupMap := cluster.groupBy(keys)
@@ -50,9 +51,12 @@ func execMSet(cluster *ClusterDatabase, conn resp.Connection, cmdLine db.CmdLine
 			break
 		}
 	}
+	// 5. 判断是否需要回滚
 	if rollback {
+		// 5.1 回滚
 		requestRollback(cluster, conn, txID, groupMap)
 	} else {
+		// 5.2 提交
 		_, errReply = requestCommit(cluster, conn, txID, groupMap)
 		rollback = errReply != nil
 	}

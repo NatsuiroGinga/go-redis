@@ -161,9 +161,10 @@ var (
 
 // cluster command
 var (
-	RENAMEFROM = &Command{name: "RENAMEFROM", paramCount: 1}
-	DUMPKEY    = &Command{name: "DUMPKEY", paramCount: 1}
-	RENAMETO   = &Command{name: "RENAMETO", paramCount: 3}
+	MULTI_RENAMEFROM = &Command{name: "RENAMEFROM", paramCount: 1}
+	MULTI_DUMPKEY    = &Command{name: "DUMPKEY", paramCount: 1}
+	MULTI_RENAMETO   = &Command{name: "RENAMETO", paramCount: 3}
+	MULTI_KEYS       = &Command{name: "KEYS_", paramCount: KEYS.paramCount}
 )
 
 // system command

@@ -1,14 +1,25 @@
 package database
 
 import (
-	"strconv"
-
+	str "go-redis/datastruct/string"
 	"go-redis/enum"
 	"go-redis/interface/db"
 	"go-redis/interface/resp"
 	"go-redis/lib/utils"
 	"go-redis/resp/reply"
 )
+
+func (d *DB) getString(key string) (*str.String, resp.ErrorReply) {
+	entity, ok := d.getEntity(key)
+	if !ok {
+		return nil, nil
+	}
+	l, ok := entity.Data.(*str.String)
+	if !ok {
+		return nil, reply.NewWrongTypeErrReply()
+	}
+	return l, nil
+}
 
 // execGet 获取key对应的value
 //
@@ -17,16 +28,23 @@ import (
 // 返回key对应的value
 func execGet(d *DB, args db.Params) resp.Reply {
 	key := utils.Bytes2String(args[0])
-	entity, ok := d.getEntity(key)
+	s, errorReply := d.getString(key)
+	if errorReply != nil {
+		return errorReply
+	}
+	if s == nil {
+		return reply.NewNullBulkReply()
+	}
+	/*entity, ok := d.getEntity(key)
 	if !ok {
 		return reply.NewNullBulkReply()
 	}
 	value, ok := entity.Data.([]byte)
 	if !ok {
 		return reply.NewWrongTypeErrReply()
-	}
+	}*/
 
-	return reply.NewBulkReply(value)
+	return reply.NewBulkReply(s.Bytes())
 }
 
 // execSet 设置key-value
@@ -36,7 +54,7 @@ func execGet(d *DB, args db.Params) resp.Reply {
 // 成功返回OK
 func execSet(d *DB, args db.Params) resp.Reply {
 	key := utils.Bytes2String(args[0])
-	value := args[1]
+	value := str.NewString(args[1])
 	d.putEntity(key, db.NewDataEntity(value))
 	d.append(utils.ToCmdLine2(enum.SET.String(), args...))
 
@@ -46,7 +64,7 @@ func execSet(d *DB, args db.Params) resp.Reply {
 // execSetNX
 func execSetNX(d *DB, args db.Params) resp.Reply {
 	key := utils.Bytes2String(args[0])
-	value := args[1]
+	value := str.NewString(args[1])
 	n := d.putIfAbsent(key, db.NewDataEntity(value))
 	d.append(utils.ToCmdLine2(enum.SETNX.String(), args...))
 
@@ -62,7 +80,7 @@ func execSetNX(d *DB, args db.Params) resp.Reply {
 // 当 key 存在但不是字符串类型时，返回一个错误。
 func execGetSet(d *DB, args db.Params) resp.Reply {
 	key := utils.Bytes2String(args[0])
-	value := args[1]
+	value := str.NewString(args[1])
 
 	entity, ok := d.getEntity(key)
 	d.putEntity(key, db.NewDataEntity(value))
@@ -72,12 +90,12 @@ func execGetSet(d *DB, args db.Params) resp.Reply {
 		return reply.NewNullBulkReply()
 	}
 
-	oldValue, ok := entity.Data.([]byte)
+	oldValue, ok := entity.Data.(*str.String)
 	if !ok {
 		return reply.NewWrongTypeErrReply()
 	}
 
-	return reply.NewBulkReply(oldValue)
+	return reply.NewBulkReply(oldValue.Bytes())
 }
 
 // execStrLen 命令用于获取指定 key 所储存的字符串值的长度。当 key 储存的不是字符串值时，返回一个错误。
@@ -89,10 +107,10 @@ func execStrLen(d *DB, args db.Params) resp.Reply {
 	if !ok {
 		return reply.NewNullBulkReply()
 	}
-	value, ok := entity.Data.([]byte)
+	value, ok := entity.Data.(*str.String)
 
 	if ok {
-		return reply.NewIntReply(int64(len(value)))
+		return reply.NewIntReply(int64(value.Len()))
 	}
 
 	return reply.NewWrongTypeErrReply()
@@ -111,27 +129,29 @@ func execIncr(d *DB, args db.Params) resp.Reply {
 	key := utils.Bytes2String(args[0])
 	entity, ok := d.getEntity(key)
 	if !ok {
-		d.putEntity(key, db.NewDataEntity(utils.String2Bytes("1")))
+		d.putEntity(key, db.NewDataEntity(str.NewString(1)))
 		d.append(utils.ToCmdLine2(enum.INCR.String(), args...))
 		return reply.NewIntReply(1)
 	}
-	value, ok := entity.Data.([]byte)
+	value, ok := entity.Data.(*str.String)
 	if !ok {
 		return reply.NewWrongTypeErrReply()
 	}
 
-	num, err := strconv.Atoi(utils.Bytes2String(value))
-	if err != nil {
+	// num, err := strconv.Atoi(utils.Bytes2String(value))
+	if !value.CanInt() {
 		return reply.NewIntErrReply()
 	}
 
-	num++
-	entity.Data = utils.String2Bytes(strconv.Itoa(num))
+	// num++
+	// entity.Data = utils.String2Bytes(strconv.Itoa(num))
+	value.SetInt(value.Int() + 1)
+	entity.Data = value
 	d.putEntity(key, entity)
 
 	d.append(utils.ToCmdLine2(enum.INCR.String(), args...))
 
-	return reply.NewIntReply(int64(num))
+	return reply.NewIntReply(value.Int())
 }
 
 // Redis Decr 命令将 key 中储存的数字值减一。
@@ -149,27 +169,28 @@ func execDecr(d *DB, args db.Params) resp.Reply {
 	key := utils.Bytes2String(args[0])
 	entity, ok := d.getEntity(key)
 	if !ok {
-		d.putEntity(key, db.NewDataEntity([]byte("-1")))
+		d.putEntity(key, db.NewDataEntity(str.NewString(-1)))
 		d.append(utils.ToCmdLine2(enum.DECR.String(), args...))
 		return reply.NewIntReply(-1)
 	}
-	value, ok := entity.Data.([]byte)
+	value, ok := entity.Data.(*str.String)
 	if !ok {
 		return reply.NewWrongTypeErrReply()
 	}
 
-	num, err := strconv.Atoi(utils.Bytes2String(value))
-	if err != nil {
+	// num, err := strconv.Atoi(utils.Bytes2String(value))
+	if !value.CanInt() {
 		return reply.NewIntErrReply()
 	}
 
-	num--
-	entity.Data = utils.String2Bytes(strconv.Itoa(num))
+	// num--
+	// entity.Data = utils.String2Bytes(strconv.Itoa(num))
+	value.SetInt(value.Int() - 1)
 	d.putEntity(key, entity)
 
 	d.append(utils.ToCmdLine2(enum.DECR.String(), args...))
 
-	return reply.NewIntReply(int64(num))
+	return reply.NewIntReply(value.Int())
 }
 
 func execMSet(d *DB, args db.Params) resp.Reply {
@@ -187,10 +208,27 @@ func execMSet(d *DB, args db.Params) resp.Reply {
 
 	for i, key := range keys {
 		value := values[i]
-		d.putEntity(key, db.NewDataEntity(value))
+		d.putEntity(key, db.NewDataEntity(str.NewString(value)))
 	}
-	d.append(utils.ToCmdLine2("mset", args...))
+	d.append(utils.ToCmdLine2(enum.MSET.String(), args...))
 	return reply.NewOKReply()
+}
+
+func execMGet(d *DB, args db.Params) resp.Reply {
+	// 1. 校验参数
+	if len(args)%2 != 0 {
+		return reply.NewSyntaxErrReply()
+	}
+	// 2.取出键
+	results := make([][]byte, 0, len(args))
+	for _, keyBytes := range args {
+		s, err := d.getString(utils.Bytes2String(keyBytes))
+		if err != nil {
+			return err
+		}
+		results = append(results, s.Bytes())
+	}
+	return reply.NewMultiBulkReply(results)
 }
 
 func init() {
@@ -202,6 +240,7 @@ func init() {
 	registerCommand(enum.STRLEN, readFirstKey, execStrLen, nil)
 	registerCommand(enum.INCR, writeFirstKey, execIncr, rollbackFirstKey)
 	registerCommand(enum.DECR, writeFirstKey, execDecr, rollbackFirstKey)
+	registerCommand(enum.MGET, readAllKeys, execMGet, nil)
 }
 
 func undoMSet(d *DB, args db.Params) []db.CmdLine {

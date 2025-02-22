@@ -47,7 +47,7 @@ func (d *DB) getOrCreateDict(key string) (hashTable dict.Dict, created bool, err
 func execHSet(d *DB, args db.Params) resp.Reply {
 	key := utils.Bytes2String(args[0])
 	field := utils.Bytes2String(args[1])
-	value := args[2]
+	value := parseBytes(args[2])
 
 	hashTable, _, errReply := d.getOrCreateDict(key)
 	if errReply != nil {
@@ -73,7 +73,7 @@ func execHSet(d *DB, args db.Params) resp.Reply {
 func execHSetNX(d *DB, args db.Params) resp.Reply {
 	key := utils.Bytes2String(args[0])
 	field := utils.Bytes2String(args[1])
-	value := args[2]
+	value := parseBytes(args[2])
 
 	hashTable, _, errReply := d.getOrCreateDict(key)
 	if errReply != nil {
@@ -110,7 +110,7 @@ func execHGet(d *DB, args db.Params) resp.Reply {
 		return reply.NewNullBulkReply()
 	}
 
-	return reply.NewBulkReply(raw.([]byte))
+	return reply.NewBulkReply(parseAny(raw))
 }
 
 // execHExists 命令用于查看哈希表的指定字段是否存在。
@@ -220,7 +220,7 @@ func execHMSet(d *DB, args db.Params) resp.Reply {
 	}
 
 	for i, field := range fields {
-		value := values[i]
+		value := parseBytes(values[i])
 		hashTable.Set(field, value)
 	}
 	d.append(utils.ToCmdLine2(enum.HMSET.String(), args...))
@@ -244,7 +244,7 @@ func execHVals(d *DB, args db.Params) resp.Reply {
 
 	values := make([][]byte, 0, hashTable.Len())
 	hashTable.ForEach(func(field string, value any) bool {
-		values = append(values, value.([]byte))
+		values = append(values, parseAny(value))
 		return true
 	})
 
@@ -294,7 +294,7 @@ func execHGetAll(d *DB, args db.Params) resp.Reply {
 
 	entries := make([][]byte, 0, hashTable.Len()*2)
 	hashTable.ForEach(func(field string, val any) bool {
-		entries = append(entries, utils.String2Bytes(field), val.([]byte))
+		entries = append(entries, utils.String2Bytes(field), parseAny(val))
 		return true
 	})
 
@@ -326,7 +326,7 @@ func execHMGet(d *DB, args db.Params) resp.Reply {
 		if !exist {
 			values = append(values, nil)
 		} else {
-			values = append(values, value.([]byte))
+			values = append(values, parseAny(value))
 		}
 	}
 

@@ -11,5 +11,4 @@ func TestToCmdLine3(t *testing.T) {
 }
 
 func TestClose(t *testing.T) {
-
 }

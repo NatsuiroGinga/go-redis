@@ -61,7 +61,7 @@ func rollbackHashFields(d *DB, key string, fields ...string) (cmds []db.CmdLine)
 					enum.HSET.String(),
 					key,
 					field,
-					utils.Bytes2String(entity.([]byte)), // 如果hashtable可以修改value的底层数据, 那么在这里不要共享内存
+					utils.Bytes2String(parseAny(entity)), // 如果hashtable可以修改value的底层数据, 那么在这里不要共享内存
 				),
 			)
 		}

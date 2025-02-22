@@ -3,6 +3,7 @@ package cluster_database
 import (
 	"strconv"
 
+	"go-redis/database"
 	"go-redis/enum"
 	"go-redis/interface/db"
 	"go-redis/interface/resp"
@@ -38,7 +39,7 @@ func execRename(clusterDatabase *ClusterDatabase, connection resp.Connection, ar
 	txIDStr := strconv.FormatInt(txID, 10)
 	// 5. 删除原key之前先上写锁, 并且保存原key对应的值
 	srcPrepareResp := clusterDatabase.relay(srcNode, connection, makeArgs(enum.TCC_PREPARE.String(), txIDStr,
-		enum.RENAMEFROM.String(), srcKey))
+		enum.MULTI_RENAMEFROM.String(), srcKey))
 
 	// 6. 如果删除操作会失败, 回滚
 	if reply.IsErrReply(srcPrepareResp) {
@@ -52,7 +53,7 @@ func execRename(clusterDatabase *ClusterDatabase, connection resp.Connection, ar
 	}
 	// 7. 保存新key时上写锁
 	destCmd := utils.ToCmdLine2(enum.TCC_PREPARE.String(), utils.String2Bytes(txIDStr),
-		enum.RENAMETO.Bytes(), utils.String2Bytes(destKey), srcPrepareMBR.Args[0], srcPrepareMBR.Args[1])
+		enum.MULTI_RENAMETO.Bytes(), utils.String2Bytes(destKey), srcPrepareMBR.Args[0], srcPrepareMBR.Args[1])
 	var destPrepareResp resp.Reply
 	destPrepareResp = clusterDatabase.relay(destNode,
 		connection, destCmd)
@@ -71,8 +72,8 @@ func execRename(clusterDatabase *ClusterDatabase, connection resp.Connection, ar
 // prepareRenameFrom 检查准备改名的旧key是否存在, 如果不存在返回错误
 func prepareRenameFrom(cluster *ClusterDatabase, conn resp.Connection, cmdLine db.CmdLine) resp.Reply {
 	// 1. 参数校验
-	if len(cmdLine) != enum.RENAMEFROM.Arity() {
-		return reply.NewArgNumErrReply(enum.RENAMEFROM.String())
+	if !database.ValidateArity(enum.MULTI_RENAMEFROM.Arity(), cmdLine) {
+		return reply.NewArgNumErrReply(enum.MULTI_RENAMEFROM.String())
 	}
 	// 2. 检查旧key是否存在
 	key := utils.Bytes2String(cmdLine[1])
@@ -85,11 +86,11 @@ func prepareRenameFrom(cluster *ClusterDatabase, conn resp.Connection, cmdLine d
 		return reply.NewNoSuchKeyErrReply()
 	}
 	// 3. 把旧key的值序列化并返回
-	return cluster.db.ExecWithoutLock(conn, utils.ToCmdLine(enum.DUMPKEY.String(), key))
+	return cluster.db.ExecWithoutLock(conn, utils.ToCmdLine(enum.MULTI_DUMPKEY.String(), key))
 }
 
 func init() {
-	registerPrepareFunc(enum.RENAMEFROM.String(), prepareRenameFrom)
+	registerPrepareFunc(enum.MULTI_RENAMEFROM.String(), prepareRenameFrom)
 }
 
 // renameCrossSlot is the function for execRename command, it will execRename the key from one slot to another

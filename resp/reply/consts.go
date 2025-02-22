@@ -14,14 +14,14 @@ var (
 	thePongReply           *PongReply
 	theOKReply             *okReply
 	theNullBulkReply       *NullBulkReply
-	theEmptyMultiBulkReply *emptyMultiBulkReply
+	theEmptyMultiBulkReply *EmptyMultiBulkReply
 	theNoReply             *noReply
 	theQueuedReply         *queuedReply
 )
 
 func init() {
 	theNoReply = new(noReply)
-	theEmptyMultiBulkReply = new(emptyMultiBulkReply)
+	theEmptyMultiBulkReply = new(EmptyMultiBulkReply)
 	thePongReply = new(PongReply)
 	theOKReply = new(okReply)
 	theNullBulkReply = new(NullBulkReply)
@@ -75,8 +75,8 @@ func (reply *NullBulkReply) Bytes() []byte {
 	return replies[reply]
 }
 
-// emptyMultiBulkReply 用于表示空的多条批量回复数组
-type emptyMultiBulkReply struct {
+// EmptyMultiBulkReply 用于表示空的多条批量回复数组
+type EmptyMultiBulkReply struct {
 }
 
 // NewEmptyMultiBulkReply 用于创建空的多条批量回复数组
@@ -84,7 +84,7 @@ func NewEmptyMultiBulkReply() resp.Reply {
 	return theEmptyMultiBulkReply
 }
 
-func (reply *emptyMultiBulkReply) Bytes() []byte {
+func (reply *EmptyMultiBulkReply) Bytes() []byte {
 	return replies[reply]
 }
 

@@ -116,7 +116,7 @@ func (set *SortedSet) ForEachByRank(start, stop int64, desc bool, consumer func(
 			node = set.skiplist.getElementByRank(size - start)
 		}
 	} else {
-		node = set.skiplist.header.level[0].forward
+		node = set.skiplist.header.level[0].next
 		if start > 0 {
 			node = set.skiplist.getElementByRank(start + 1)
 		}
@@ -129,9 +129,9 @@ func (set *SortedSet) ForEachByRank(start, stop int64, desc bool, consumer func(
 			break
 		}
 		if desc { // 3.1 如果是逆序, 那么向backward的方向遍历
-			node = node.backward
+			node = node.prev
 		} else {
-			node = node.level[0].forward
+			node = node.level[0].next
 		}
 	}
 }
@@ -177,9 +177,9 @@ func (set *SortedSet) ForEach(min, max Border, offset, limit int64, desc bool, c
 	}
 	for node != nil && offset > 0 {
 		if desc {
-			node = node.backward
+			node = node.prev
 		} else {
-			node = node.level[0].forward
+			node = node.level[0].next
 		}
 		offset--
 	}
@@ -189,9 +189,9 @@ func (set *SortedSet) ForEach(min, max Border, offset, limit int64, desc bool, c
 			break
 		}
 		if desc {
-			node = node.backward
+			node = node.prev
 		} else {
-			node = node.level[0].forward
+			node = node.level[0].next
 		}
 		if node == nil {
 			break
@@ -251,7 +251,7 @@ func (set *SortedSet) PopMax(count int) []*Element {
 	return removed
 }
 
-// RemoveByRank 移除有序集key中，指定排名(rank)区间内的所有成员（包含两端）
+// RemoveByRank 移除有序集key中，指定排名(rank)区间内的所有成员（包含两端）, rank从0开始
 func (set *SortedSet) RemoveByRank(start, stop int64) int64 {
 	removed := set.skiplist.deleteRangeByRank(start+1, stop+1)
 	for _, element := range removed {

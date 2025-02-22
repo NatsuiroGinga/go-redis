@@ -162,12 +162,15 @@ func (cd *ClusterDatabase) relay(peer string, conn resp.Connection, args db.CmdL
 	return oneClient.Send(args)
 }
 
-// broadcast broadcasts the command to all peers
-func (cd *ClusterDatabase) broadcast(connection resp.Connection, args db.CmdLine) (results map[string]resp.Reply) {
-	results = make(map[string]resp.Reply)
+// broadcast 把指令广播给所有节点, 除了发送给本节点请求的节点
+func (cd *ClusterDatabase) broadcast(connection resp.Connection, args db.CmdLine) map[string]resp.Reply {
+	results := make(map[string]resp.Reply)
 	for _, peer := range cd.nodes {
-		results[peer] = cd.relay(peer, connection, args)
+		if peer == cd.self {
+			results[peer] = cd.relay(peer, connection, args)
+		} else {
+			results[peer] = cd.relay(peer, connection, modifyCmd(args, string(args[0])+"_"))
+		}
 	}
-
 	return results
 }

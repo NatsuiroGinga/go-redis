@@ -11,4 +11,5 @@ type Handler interface {
 	Handle(ctx context.Context, conn net.Conn)
 	// Close is called when the server is closed.
 	Close() error
+	GetConnCount() int
 }

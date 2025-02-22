@@ -1,7 +1,8 @@
 package database
 
 import (
-	"bytes"
+	"math"
+	"reflect"
 	"strconv"
 	"strings"
 
@@ -74,7 +75,8 @@ func execLIndex(d *DB, args db.Params) resp.Reply {
 	}
 
 	// 4. 获取数据
-	val, _ := l.Get(int(index)).([]byte)
+	anyVal := l.Get(int(index))
+	val := parseAny(anyVal)
 	return reply.NewBulkReply(val)
 }
 
@@ -112,7 +114,8 @@ func execLPop(d *DB, args db.Params) resp.Reply {
 		return reply.NewNullBulkReply()
 	}
 
-	val, _ := l.Remove(0).([]byte)
+	anyVal := l.Remove(0)
+	val := parseAny(anyVal)
 	if l.Len() == 0 {
 		d.Remove(key)
 	}
@@ -129,7 +132,8 @@ func undoLPop(d *DB, args db.Params) []db.CmdLine {
 	if l == nil || l.Len() == 0 {
 		return nil
 	}
-	element, _ := l.Get(0).([]byte)
+	anyElement := l.Get(0)
+	element := parseAny(anyElement)
 
 	return []db.CmdLine{utils.ToCmdLine2(enum.LPUSH.String(), args[0], element)}
 }
@@ -150,11 +154,43 @@ func execLPush(d *DB, args db.Params) resp.Reply {
 	}
 
 	for _, value := range values {
-		l.Insert(0, value)
+		l.Insert(0, parseBytes(value))
 	}
 
 	d.append(utils.ToCmdLine2(enum.LPUSH.String(), args...))
 	return reply.NewIntReply(int64(l.Len()))
+}
+
+// parseBytes 把byte数组转化为any, any可能为[]byte, 或者根据整数的大小转为int8/int16/int32/int64
+func parseBytes(value []byte) any {
+	intVal, err := strconv.ParseInt(utils.Bytes2String(value), 10, 64)
+	if err != nil {
+		return value
+	}
+	return encodeInt(intVal)
+}
+
+// encodeInt 把int64转化为int8/int16/int32/int64
+func encodeInt(val int64) any {
+	if val >= math.MinInt8 && val <= math.MaxInt8 {
+		return int8(val)
+	}
+	if val >= math.MinInt16 && val <= math.MaxInt16 {
+		return int16(val)
+	}
+	if val >= math.MinInt32 && val <= math.MaxInt32 {
+		return int32(val)
+	}
+	return val
+}
+
+// parseAny 把any类型的val转化为byte数组
+func parseAny(value any) []byte {
+	val := reflect.ValueOf(value)
+	if val.CanInt() {
+		return utils.String2Bytes(strconv.FormatInt(val.Int(), 10))
+	}
+	return val.Bytes()
 }
 
 func undoLPush(_ *DB, args db.Params) []db.CmdLine {
@@ -185,7 +221,7 @@ func execLPushX(d *DB, args db.Params) resp.Reply {
 	}
 
 	for _, value := range values {
-		l.Insert(0, value)
+		l.Insert(0, parseBytes(value))
 	}
 	d.append(utils.ToCmdLine2(enum.LPUSHX.String(), args...))
 	return reply.NewIntReply(int64(l.Len()))
@@ -225,7 +261,7 @@ func execLRange(d *DB, args db.Params) resp.Reply {
 	slice := l.Range(start, stop)
 	result := make([][]byte, len(slice))
 	for i, raw := range slice {
-		result[i] = raw.([]byte)
+		result[i] = parseAny(raw)
 	}
 	return reply.NewMultiBulkReply(result)
 }
@@ -258,7 +294,7 @@ func execLRem(d *DB, args db.Params) resp.Reply {
 	if err != nil {
 		return reply.NewIntErrReply()
 	}
-	value := args[2]
+	value := parseBytes(args[2])
 
 	var removed int
 	if count == 0 { // 移除表中所有与 VALUE 相等的值。
@@ -299,7 +335,7 @@ func execLSet(d *DB, args db.Params) resp.Reply {
 	if err != nil {
 		return reply.NewIntErrReply()
 	}
-	value := args[2]
+	value := parseBytes(args[2])
 
 	// get data
 	l, errReply := d.getList(key)
@@ -351,7 +387,8 @@ func undoLSet(d *DB, args db.Params) []db.CmdLine {
 		return nil
 	}
 
-	value, _ := l.Get(index).([]byte)
+	anyValue := l.Get(index)
+	value := parseAny(anyValue)
 
 	return []db.CmdLine{utils.ToCmdLine2(enum.LSET.String(), args[0], args[1], value)}
 }
@@ -372,7 +409,9 @@ func execRPop(d *DB, args db.Params) resp.Reply {
 		return reply.NewNullBulkReply()
 	}
 
-	val, _ := l.RemoveLast().([]byte)
+	anyVal := l.RemoveLast()
+	val := parseAny(anyVal)
+
 	if l.Len() == 0 {
 		d.Remove(key)
 	}
@@ -389,7 +428,8 @@ func undoRPop(d *DB, args db.Params) []db.CmdLine {
 	if l == nil || l.Len() == 0 {
 		return nil
 	}
-	element := l.Get(l.Len() - 1).([]byte)
+	anyElement := l.Get(l.Len() - 1)
+	element := parseAny(anyElement)
 
 	return []db.CmdLine{utils.ToCmdLine2(enum.LPUSH.String(), args[0], element)}
 }
@@ -423,7 +463,7 @@ func execRPopLPush(d *DB, args db.Params) resp.Reply {
 		return errReply
 	}
 
-	val, _ := sourceList.RemoveLast().([]byte)
+	val := sourceList.RemoveLast()
 	destList.Insert(0, val)
 
 	if sourceList.Len() == 0 {
@@ -431,7 +471,7 @@ func execRPopLPush(d *DB, args db.Params) resp.Reply {
 	}
 
 	d.append(utils.ToCmdLine2(enum.RPOPLPUSH.String(), args...))
-	return reply.NewBulkReply(val)
+	return reply.NewBulkReply(parseAny(val))
 }
 
 func undoRPopLPush(d *DB, args db.Params) []db.CmdLine {
@@ -443,7 +483,10 @@ func undoRPopLPush(d *DB, args db.Params) []db.CmdLine {
 	if l == nil || l.Len() == 0 {
 		return nil
 	}
-	element, _ := l.Get(l.Len() - 1).([]byte)
+
+	anyElement := l.Get(l.Len() - 1)
+	element := parseAny(anyElement)
+
 	return []db.CmdLine{
 		{
 			enum.RPUSH.Bytes(),
@@ -472,8 +515,9 @@ func execRPush(d *DB, args db.Params) resp.Reply {
 	}
 
 	for _, value := range values {
-		l.PushBack(value)
+		l.PushBack(parseBytes(value))
 	}
+
 	d.append(utils.ToCmdLine2(enum.RPUSH.String(), args...))
 	return reply.NewIntReply(int64(l.Len()))
 }
@@ -506,7 +550,7 @@ func execRPushX(d *DB, args db.Params) resp.Reply {
 	}
 
 	for _, value := range values {
-		l.PushBack(value)
+		l.PushBack(parseBytes(value))
 	}
 	d.append(utils.ToCmdLine2(enum.RPUSHX.String(), args...))
 
@@ -582,10 +626,10 @@ func execLInsert(d *DB, args db.Params) resp.Reply {
 		return reply.NewSyntaxErrReply()
 	}
 
-	pivot := args[2]
+	pivot := parseBytes(args[2])
 	index := -1
 	l.ForEach(func(i int, v any) bool {
-		if bytes.Equal(pivot, v.([]byte)) {
+		if utils.Equals(pivot, v) {
 			index = i
 			return false
 		}

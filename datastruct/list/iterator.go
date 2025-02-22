@@ -16,6 +16,7 @@ func (iter *iterator) get() any {
 	return iter.shard()[iter.offset]
 }
 
+// shard 获取一个shard
 func (iter *iterator) shard() []any {
 	return iter.node.Value.([]any)
 }
@@ -60,7 +61,7 @@ func (iter *iterator) prev() bool {
 	return true
 }
 
-func (iter *iterator) set(val interface{}) {
+func (iter *iterator) set(val any) {
 	shard := iter.shard()
 	shard[iter.offset] = val
 }

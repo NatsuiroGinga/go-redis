@@ -5,6 +5,7 @@ import (
 	"go-redis/enum"
 	"go-redis/interface/db"
 	"go-redis/interface/resp"
+	"go-redis/lib/logger"
 	"go-redis/lib/utils"
 	"go-redis/resp/reply"
 )
@@ -53,12 +54,13 @@ func execExists(cluster *ClusterDatabase, conn resp.Connection, args db.CmdLine)
 		for i, k := range group {
 			peerArgs[i+1] = k
 		}
-		// 发送命令
+		// 3.1 发送命令
 		r := cluster.relay(peer, conn, utils.ToCmdLine(peerArgs...))
 		if reply.IsErrReply(r) {
 			errReply = r
 			break
 		}
+		// 3.2 处理结果, 累加计数器
 		if intReply, ok := r.(*reply.IntReply); !ok {
 			errReply = reply.NewErrReply("reply is not IntReply")
 			break
@@ -76,23 +78,28 @@ func execExists(cluster *ClusterDatabase, conn resp.Connection, args db.CmdLine)
 
 // execKeys 把命令发送到所有节点中统计符合条件的key的数量
 func execKeys(cluster *ClusterDatabase, conn resp.Connection, args db.CmdLine) resp.Reply {
+	// 1. 校验参数合法性
 	if !database.ValidateArity(enum.KEYS.Arity(), args) {
 		return reply.NewArgNumErrReply(enum.KEYS.String())
 	}
+	// 2. 转发指令给所有节点
 	replies := cluster.broadcast(conn, args)
 	keys := make([]string, 0)
-
+	// 3. 处理结果列表
 	var errReply resp.ErrorReply
 	for _, r := range replies {
+		// 3.1 判断是否为错误回复
 		if reply.IsErrReply(r) {
 			errReply = r.(resp.ErrorReply)
 			break
 		}
-		if multiReply, ok := r.(*reply.MultiBulkReply); !ok {
-			errReply = reply.NewErrReply("reply is not MultiBulkReply")
-			break
-		} else {
-			keys = append(keys, utils.CmdLine2Strings(multiReply.Args)...)
+		logger.Debug("reply:", string(r.Bytes()))
+		// 3.2 处理一条回复
+		switch re := r.(type) {
+		case *reply.MultiBulkReply:
+			keys = append(keys, utils.CmdLine2Strings(re.Args)...)
+		case *reply.BulkReply:
+			keys = append(keys, utils.Bytes2String(re.Arg))
 		}
 	}
 	if errReply != nil {
