@@ -9,7 +9,7 @@ import (
 type iterator struct {
 	node   *list.Element // 指向的节点
 	offset int           // 片内偏移量
-	ql     *QuickList    // 所属跳表
+	ql     *QuickList    // 所属QuickList
 }
 
 func (iter *iterator) get() any {
